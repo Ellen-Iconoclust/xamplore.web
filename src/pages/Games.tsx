@@ -8,7 +8,7 @@ export default function Games() {
   const [activeGame, setActiveGame] = useState<'hangman' | 'logic'>('hangman');
   
   // Hangman State
-  const [wordObj, setWordObj] = useState(WORDS[0]);
+  const [wordObj, setWordObj] = useState(() => WORDS[Math.floor(Math.random() * WORDS.length)]);
   const [guessedLetters, setGuessedLetters] = useState<string[]>([]);
   const [mistakes, setMistakes] = useState(0);
   const [hangmanScore, setHangmanScore] = useState(0);
@@ -17,6 +17,7 @@ export default function Games() {
   const [showHint, setShowHint] = useState(false);
 
   // Logic Lab State
+  const [shuffledPuzzles, setShuffledPuzzles] = useState(() => [...LOGIC_PUZZLES].sort(() => Math.random() - 0.5));
   const [currentLogicIndex, setCurrentLogicIndex] = useState(0);
   const [logicScore, setLogicScore] = useState(0);
   const [logicGameOver, setLogicGameOver] = useState(false);
@@ -54,7 +55,7 @@ export default function Games() {
   const handleLogicAnswer = (selected: string) => {
     if (logicFeedback) return;
 
-    const current = LOGIC_PUZZLES[currentLogicIndex];
+    const current = shuffledPuzzles[currentLogicIndex];
     const isCorrect = selected === current.answer;
 
     if (isCorrect) {
@@ -65,15 +66,9 @@ export default function Games() {
     }
 
     setTimeout(() => {
-      // For a 100 puzzle pool, maybe we just play 10 at a time?
-      // Or just keep going until they finish or quit.
-      // Let's do 10 puzzles per session for better UX.
       const puzzlesPerSession = 10;
-      const sessionProgress = (currentLogicIndex % puzzlesPerSession) + 1;
-
-      if (sessionProgress < puzzlesPerSession) {
-        // Move to next puzzle in the pool (looping back if needed)
-        setCurrentLogicIndex((currentLogicIndex + 1) % LOGIC_PUZZLES.length);
+      if (currentLogicIndex < puzzlesPerSession - 1 && currentLogicIndex < shuffledPuzzles.length - 1) {
+        setCurrentLogicIndex(prev => prev + 1);
         setLogicFeedback(null);
       } else {
         setLogicGameOver(true);
@@ -82,8 +77,8 @@ export default function Games() {
   };
 
   const resetLogic = () => {
-    // Pick a random starting point or just reset to 0
-    setCurrentLogicIndex(Math.floor(Math.random() * LOGIC_PUZZLES.length));
+    setShuffledPuzzles([...LOGIC_PUZZLES].sort(() => Math.random() - 0.5));
+    setCurrentLogicIndex(0);
     setLogicScore(0);
     setLogicGameOver(false);
     setLogicFeedback(null);
@@ -261,7 +256,7 @@ export default function Games() {
                 </div>
                 <div className="bg-white px-6 py-2 rounded-full shadow-md border border-emerald-100 flex items-center gap-2">
                   <Star className="text-emerald-500 w-5 h-5" />
-                  <span className="font-bold text-gray-800">Puzzle: {(currentLogicIndex % 10) + 1}/10</span>
+                  <span className="font-bold text-gray-800">Puzzle: {currentLogicIndex + 1}/10</span>
                 </div>
               </div>
             </div>
@@ -274,23 +269,23 @@ export default function Games() {
                   <h4 className="text-sm font-bold text-emerald-600 uppercase tracking-widest mb-4">What is the output of this code?</h4>
                   <div className="bg-gray-900 rounded-2xl p-6 font-mono text-emerald-400 shadow-inner overflow-x-auto">
                     <pre className="text-sm md:text-base whitespace-pre-wrap">
-                      {LOGIC_PUZZLES[currentLogicIndex].code}
+                      {shuffledPuzzles[currentLogicIndex].code}
                     </pre>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-auto">
-                  {LOGIC_PUZZLES[currentLogicIndex].options.map((option, i) => (
+                  {shuffledPuzzles[currentLogicIndex].options.map((option, i) => (
                     <button
                       key={i}
                       onClick={() => handleLogicAnswer(option)}
                       disabled={!!logicFeedback || logicGameOver}
                       className={`p-6 rounded-2xl font-bold text-lg transition-all duration-300 border-2 text-center ${
-                        logicFeedback?.correct && option === LOGIC_PUZZLES[currentLogicIndex].answer
+                        logicFeedback?.correct && option === shuffledPuzzles[currentLogicIndex].answer
                           ? 'bg-emerald-500 border-emerald-500 text-white'
-                          : !logicFeedback?.correct && logicFeedback && option === LOGIC_PUZZLES[currentLogicIndex].answer
+                          : !logicFeedback?.correct && logicFeedback && option === shuffledPuzzles[currentLogicIndex].answer
                           ? 'bg-emerald-100 border-emerald-500 text-emerald-700'
-                          : !logicFeedback?.correct && logicFeedback && option !== LOGIC_PUZZLES[currentLogicIndex].answer
+                          : !logicFeedback?.correct && logicFeedback && option !== shuffledPuzzles[currentLogicIndex].answer
                           ? 'bg-gray-50 border-gray-200 text-gray-400'
                           : 'bg-white border-gray-100 text-gray-700 hover:border-emerald-500 hover:bg-emerald-50'
                       }`}
