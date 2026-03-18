@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - role: string (required, 'student' or 'admin')
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: exams
+    // Document ID: examId
+    // Fields:
+    //   - title: string (required)
+    //   - description: string (optional)
+    //   - duration: number (required)
+    //   - startTime: timestamp (optional)
+    //   - questions: list (required)
+    //   - status: string (required, 'draft', 'active', 'completed')
+    //
+    // Collection: submissions
+    // Document ID: submissionId
+    // Fields:
+    //   - examId: string (required)
+    //   - userId: string (required)
+    //   - answers: map (required)
+    //   - score: number (optional)
+    //   - status: string (required, 'in-progress', 'submitted', 'failed')
+    //   - startedAt: timestamp (required)
+    //   - submittedAt: timestamp (optional)
+    //   - tabSwitches: number (required)
+    //
+    // Collection: resources
+    // Document ID: resourceId
+    // Fields:
+    //   - title: string (required)
+    //   - url: string (required)
+    //   - category: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "elleniconoclust@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && data.email.size() > 0 &&
+             data.role in ['student', 'admin'];
+    }
+
+    function isValidSubmission(data) {
+      return data.keys().hasAll(['examId', 'userId', 'status', 'tabSwitches']) &&
+             data.examId is string &&
+             data.userId == request.auth.uid &&
+             data.status in ['in-progress', 'submitted', 'failed'] &&
+             data.tabSwitches is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role);
+    }
+
+    match /exams/{examId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        !('allowedEmails' in resource.data) || 
+        resource.data.allowedEmails.size() == 0 || 
+        request.auth.token.email in resource.data.allowedEmails
+      );
+      allow write: if isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidSubmission(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /resources/{resourceId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}
