@@ -41,10 +41,10 @@ export default function ExamPage({ user }: ExamPageProps) {
           where('examId', '==', examId)
         );
         const snapshot = await getDocs(q);
+        let currentSubmission: any = null;
         
         if (!snapshot.empty) {
-          const submissions = snapshot.docs.map(d => d.data());
-          console.log('Existing submissions found:', submissions);
+          const submissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
           
           const isSubmitted = submissions.some(s => s.status === 'submitted');
           const isFailed = submissions.some(s => s.status === 'failed');
@@ -58,42 +58,68 @@ export default function ExamPage({ user }: ExamPageProps) {
             navigate('/dashboard');
             return;
           }
-          // If all submissions are 'retake_allowed', we continue
+          
+          // Find retake_allowed or in-progress
+          currentSubmission = submissions.find(s => s.status === 'retake_allowed' || s.status === 'in-progress');
         }
 
-        // 2. If no submission, listen to exam data
-        const unsubscribe = onSnapshot(doc(db, 'exams', examId), (examSnap) => {
-          console.log('Exam snapshot received:', examSnap.exists());
-          if (examSnap.exists()) {
-            const examData = { id: examSnap.id, ...examSnap.data() } as Exam;
-            console.log('Exam data:', examData);
-            setExam(examData);
-            setTimeLeft(examData.duration * 60);
-            setStatus('started');
-            setStarted(true);
-          } else {
-            console.error('Exam not found in Firestore for ID:', examId);
-            alert('Error: Exam not found. Please contact the administrator.');
-            navigate('/dashboard');
-          }
-          setLoading(false);
-        }, (error) => {
-          console.error('Error fetching exam:', error);
-          alert('Error fetching exam data: ' + error.message);
-          setLoading(false);
+        // 2. Fetch exam data
+        const examSnap = await getDoc(doc(db, 'exams', examId));
+        if (!examSnap.exists()) {
+          alert('Exam not found.');
           navigate('/dashboard');
-        });
+          return;
+        }
+        const examData = { id: examSnap.id, ...examSnap.data() } as Exam;
+        setExam(examData);
+        setTimeLeft(examData.duration * 60);
 
-        return unsubscribe;
+        // 3. Handle submission state
+        if (currentSubmission) {
+          if (currentSubmission.status === 'retake_allowed') {
+            // Check expiry
+            const now = new Date();
+            if (currentSubmission.specialLoginExpiry && currentSubmission.specialLoginExpiry.toDate() < now) {
+              alert('Special login window has expired. Please contact admin.');
+              navigate('/dashboard');
+              return;
+            }
+            // Update to in-progress
+            await updateDoc(doc(db, 'submissions', currentSubmission.id), {
+              status: 'in-progress',
+              startedAt: serverTimestamp(),
+              specialLoginExpiry: null,
+              tabSwitches: 0,
+              answers: {}
+            });
+          }
+        } else {
+          // Create new in-progress submission to "lock in" the user
+          await addDoc(collection(db, 'submissions'), {
+            examId: examId,
+            userId: user.uid,
+            userName: user.displayName,
+            status: 'in-progress',
+            startedAt: serverTimestamp(),
+            tabSwitches: 0,
+            pattern: examData.pattern,
+            answers: {}
+          });
+        }
+
+        setStatus('started');
+        setStarted(true);
+        setLoading(false);
       } catch (error) {
         console.error('Error initializing exam:', error);
         setLoading(false);
       }
     };
 
-    const cleanupPromise = initExam();
+    initExam();
+    
     return () => {
-      cleanupPromise.then(unsub => unsub && unsub());
+      // Cleanup logic if needed
     };
   }, [examId, user.uid, navigate]);
 
@@ -194,16 +220,23 @@ export default function ExamPage({ user }: ExamPageProps) {
       document.exitFullscreen().catch(() => {});
     } catch (e) {}
     
-    await addDoc(collection(db, 'submissions'), {
-      examId: examId,
-      userId: user.uid,
-      userName: user.displayName,
-      status: 'failed',
-      reason: reason,
-      pattern: exam.pattern,
-      tabSwitches: tabSwitches + 1,
-      submittedAt: serverTimestamp()
-    });
+    // Find the current in-progress submission to update it
+    const q = query(
+      collection(db, 'submissions'), 
+      where('userId', '==', user.uid), 
+      where('examId', '==', examId),
+      where('status', '==', 'in-progress')
+    );
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+      await updateDoc(doc(db, 'submissions', snapshot.docs[0].id), {
+        status: 'failed',
+        reason: reason,
+        tabSwitches: tabSwitches + 1,
+        submittedAt: serverTimestamp()
+      });
+    }
   };
 
   const handleSubmit = async () => {
@@ -214,25 +247,31 @@ export default function ExamPage({ user }: ExamPageProps) {
       // Calculate score
       let calculatedScore = 0;
       exam.questions.forEach(q => {
-        // Compare selected index with correct answer index
         if (answers[q.id] === q.correctAnswer) {
           calculatedScore += 1;
         }
       });
       setScore(calculatedScore);
 
-      await addDoc(collection(db, 'submissions'), {
-        examId: examId,
-        userId: user.uid,
-        userName: user.displayName,
-        answers,
-        tabSwitches,
-        status: 'submitted',
-        score: calculatedScore,
-        totalQuestions: exam.questions.length,
-        pattern: exam.pattern,
-        submittedAt: serverTimestamp()
-      });
+      // Find the current in-progress submission to update it
+      const q = query(
+        collection(db, 'submissions'), 
+        where('userId', '==', user.uid), 
+        where('examId', '==', examId),
+        where('status', '==', 'in-progress')
+      );
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        await updateDoc(doc(db, 'submissions', snapshot.docs[0].id), {
+          answers,
+          tabSwitches,
+          status: 'submitted',
+          score: calculatedScore,
+          totalQuestions: exam.questions.length,
+          submittedAt: serverTimestamp()
+        });
+      }
       setStatus('completed');
     } catch (error) {
       console.error('Error submitting exam:', error);
