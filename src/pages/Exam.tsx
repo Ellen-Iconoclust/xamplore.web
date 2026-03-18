@@ -24,6 +24,7 @@ export default function ExamPage({ user }: ExamPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<'idle' | 'started' | 'completed' | 'failed'>('idle');
   const [score, setScore] = useState(0);
+  const [isWaiting, setIsWaiting] = useState(false);
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -283,6 +284,43 @@ export default function ExamPage({ user }: ExamPageProps) {
     );
   }
 
+  if (isWaiting) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl p-12 shadow-2xl border border-emerald-100 text-center max-w-lg w-full"
+        >
+          <Clock size={64} className="mx-auto text-emerald-500 mb-6 animate-pulse" />
+          <h2 className="text-3xl font-bold text-gray-800 mb-4 brand">Answers Recorded</h2>
+          <p className="text-gray-600 mb-10">
+            Your responses have been saved. Please wait for the timer to expire to finalize your submission. 
+            <span className="block mt-2 font-bold text-red-600 uppercase tracking-tighter text-xs">
+              Do not exit fullscreen or switch tabs.
+            </span>
+          </p>
+          
+          <div className="relative">
+            <div className="text-6xl font-mono font-bold text-emerald-600 bg-emerald-50 py-10 rounded-2xl border border-emerald-100 shadow-inner">
+              {formatTime(timeLeft)}
+            </div>
+            <div className="absolute -top-3 -right-3">
+              <span className="flex h-6 w-6">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-6 w-6 bg-emerald-500"></span>
+              </span>
+            </div>
+          </div>
+          
+          <p className="mt-10 text-sm text-gray-400 italic">
+            The exam will auto-submit when the countdown reaches zero.
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
   if (!exam.questions || exam.questions.length === 0) {
     return (
       <div className="max-w-xl mx-auto px-6 py-20 text-center">
@@ -383,11 +421,10 @@ export default function ExamPage({ user }: ExamPageProps) {
             
             {currentQuestionIndex === exam.questions.length - 1 ? (
               <button 
-                onClick={handleSubmit}
-                disabled={submitting}
+                onClick={() => setIsWaiting(true)}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-10 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2"
               >
-                {submitting ? 'Submitting...' : 'Submit Exam'}
+                Submit Exam
               </button>
             ) : (
               <button 
@@ -397,30 +434,6 @@ export default function ExamPage({ user }: ExamPageProps) {
                 Next <ArrowRight size={20} />
               </button>
             )}
-          </div>
-        </div>
-
-        {/* Floating Navigator (Desktop) */}
-        <div className="fixed bottom-10 right-10 hidden xl:block">
-          <div className="bg-white p-6 rounded-xl shadow-2xl border border-gray-200 w-64">
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Question Navigator</p>
-            <div className="grid grid-cols-5 gap-2">
-              {exam.questions.map((q, i) => (
-                <button
-                  key={q.id}
-                  onClick={() => setCurrentQuestionIndex(i)}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
-                    currentQuestionIndex === i 
-                    ? 'bg-emerald-600 text-white shadow-md' 
-                    : answers[q.id] 
-                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' 
-                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       </div>
