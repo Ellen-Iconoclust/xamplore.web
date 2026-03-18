@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID." },
+        "email": { "type": "string", "description": "User email." },
+        "displayName": { "type": "string", "description": "User display name." },
+        "photoURL": { "type": "string", "description": "User photo URL." },
+        "role": { "type": "string", "enum": ["student", "admin"], "description": "User role." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation time." }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Exam details and configuration.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "duration": { "type": "integer", "description": "Duration in minutes." },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "questions": { "type": "array", "items": { "$ref": "Question" } },
+        "status": { "type": "string", "enum": ["draft", "active", "completed"] },
+        "pattern": { "type": "string", "description": "Exam pattern (A, B, C)." },
+        "password": { "type": "string", "description": "Exam password." },
+        "allowedEmails": { "type": "array", "items": { "type": "string" }, "description": "List of user emails allowed to take this exam." },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["title", "duration", "questions"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "A single exam question.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctAnswer": { "type": "integer", "description": "Index of the correct option." },
+        "points": { "type": "integer" }
+      },
+      "required": ["text", "options", "correctAnswer"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "User's exam submission.",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string" },
+        "userId": { "type": "string" },
+        "answers": { "type": "object", "description": "Map of question ID to selected option index." },
+        "score": { "type": "integer" },
+        "status": { "type": "string", "enum": ["in-progress", "submitted", "failed"] },
+        "pattern": { "type": "string", "description": "Exam pattern." },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "tabSwitches": { "type": "integer", "description": "Number of times user left the tab." }
+      },
+      "required": ["examId", "userId", "status"]
+    },
+    "Resource": {
+      "title": "Resource",
+      "description": "Learning resource or course.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "url": { "type": "string" },
+        "category": { "type": "string" },
+        "thumbnail": { "type": "string" }
+      },
+      "required": ["title", "url"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles." },
+    "/exams/{examId}": { "schema": "Exam", "description": "Exams collection." },
+    "/submissions/{submissionId}": { "schema": "Submission", "description": "Exam submissions." },
+    "/resources/{resourceId}": { "schema": "Resource", "description": "Learning resources." }
+  }
+}
