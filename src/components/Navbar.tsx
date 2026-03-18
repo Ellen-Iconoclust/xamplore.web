@@ -12,6 +12,10 @@ export default function Navbar({ user }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
 
+  if (location.pathname.startsWith('/exam/')) {
+    return null;
+  }
+
   const handleLogout = async () => {
     await logout();
   };
