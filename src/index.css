@@ -1,0 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Montserrat:wght@700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #059669; /* Emerald 600 */
+  --color-secondary: #1f2937; /* Gray 800 */
+  --color-accent: #10b981; /* Emerald 500 */
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Montserrat", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  * {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  
+  body {
+    @apply bg-white text-gray-800 font-sans;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .brand {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition duration-300 disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-6 rounded-lg transition duration-300 disabled:opacity-50;
+  }
+  .card {
+    @apply bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300;
+  }
+  .input-field {
+    @apply w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all;
+  }
+}
+
+/* Custom Animations from original code */
+.timer-running {
+  animation: pulse-timer 2s infinite;
+}
+
+@keyframes pulse-timer {
+  0%, 100% { background-color: #fef3c7; }
+  50% { background-color: #fde68a; }
+}
+
+@keyframes gradient-pulse {
+  0%, 100% {
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.1) 40%, transparent 70%);
+    transform: scale(1);
+  }
+  50% {
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.15) 40%, transparent 70%);
+    transform: scale(1.05);
+  }
+}
+
+.animate-gradient-pulse {
+  animation: gradient-pulse 8s ease-in-out infinite;
+}
+
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.line-clamp-3 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
