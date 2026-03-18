@@ -22,6 +22,7 @@ export default function Admin({ user }: AdminProps) {
     title: '',
     description: '',
     duration: 30,
+    loginWindow: 5,
     status: 'draft',
     pattern: '',
     password: '',
@@ -73,20 +74,25 @@ export default function Admin({ user }: AdminProps) {
     }
     
     try {
+      const examData = { ...newExam };
+      if (examData.status === 'active' && !editingExam) {
+        examData.startTime = serverTimestamp() as any;
+      }
+      
       if (editingExam) {
         await updateDoc(doc(db, 'exams', editingExam.id), {
-          ...newExam
+          ...examData
         });
       } else {
         await addDoc(collection(db, 'exams'), {
-          ...newExam,
+          ...examData,
           createdBy: user.uid,
           createdAt: serverTimestamp()
         });
       }
       setShowExamModal(false);
       setEditingExam(null);
-      setNewExam({ title: '', description: '', duration: 30, status: 'draft', pattern: '', password: '', allowedEmails: [], questions: [] });
+      setNewExam({ title: '', description: '', duration: 30, loginWindow: 5, status: 'draft', pattern: '', password: '', allowedEmails: [], questions: [] });
     } catch (error) {
       console.error('Error saving exam:', error);
     }
@@ -154,12 +160,23 @@ export default function Admin({ user }: AdminProps) {
 
   const toggleExamStatus = async (exam: Exam) => {
     const newStatus = exam.status === 'active' ? 'completed' : 'active';
-    await updateDoc(doc(db, 'exams', exam.id), { status: newStatus });
+    const updates: any = { status: newStatus };
+    if (newStatus === 'active') {
+      updates.startTime = serverTimestamp();
+    }
+    await updateDoc(doc(db, 'exams', exam.id), updates);
   };
 
   const handleResetSubmission = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'submissions', id), { status: 'retake_allowed' });
+      // Grant 15 minutes of special login time
+      const expiry = new Date();
+      expiry.setMinutes(expiry.getMinutes() + 15);
+      
+      await updateDoc(doc(db, 'submissions', id), { 
+        status: 'retake_allowed',
+        specialLoginExpiry: expiry
+      });
     } catch (error: any) {
       console.error('Error resetting submission:', error);
       alert('Error resetting submission: ' + error.message);
@@ -473,11 +490,29 @@ export default function Admin({ user }: AdminProps) {
                     <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Duration (Mins)</label>
                     <input 
                       type="number" 
-                      value={newExam.duration}
-                      onChange={(e) => setNewExam({...newExam, duration: parseInt(e.target.value)})}
+                      value={newExam.duration ?? ''}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setNewExam({...newExam, duration: isNaN(val) ? 0 : val});
+                      }}
                       className="w-full px-6 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20" 
                     />
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Login Window (Mins)</label>
+                    <input 
+                      type="number" 
+                      value={newExam.loginWindow ?? ''}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setNewExam({...newExam, loginWindow: isNaN(val) ? 0 : val});
+                      }}
+                      className="w-full px-6 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                      placeholder="e.g. 5"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Initial Status</label>
                     <select 
