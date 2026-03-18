@@ -22,6 +22,7 @@ export interface Exam {
   title: string;
   description?: string;
   duration: number; // in minutes
+  loginWindow?: number; // in minutes (restriction time)
   startTime?: Timestamp;
   endTime?: Timestamp;
   questions: Question[];
@@ -36,12 +37,15 @@ export interface Submission {
   id: string;
   examId: string;
   userId: string;
+  userName?: string;
   answers: Record<string, number>;
   score?: number;
-  status: 'in-progress' | 'submitted' | 'failed';
+  status: 'in-progress' | 'submitted' | 'failed' | 'retake_allowed';
   startedAt: Timestamp;
   submittedAt?: Timestamp;
   tabSwitches: number;
+  reason?: string;
+  specialLoginExpiry?: Timestamp;
 }
 
 export interface Resource {
