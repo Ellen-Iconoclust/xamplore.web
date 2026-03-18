@@ -28,7 +28,7 @@ export default function ExamPage({ user }: ExamPageProps) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!examId) return;
+    if (!examId || !db) return;
     const unsubscribe = onSnapshot(doc(db, 'exams', examId), (snapshot) => {
       if (snapshot.exists()) {
         const examData = { id: snapshot.id, ...snapshot.data() } as Exam;
@@ -36,11 +36,19 @@ export default function ExamPage({ user }: ExamPageProps) {
         setTimeLeft(examData.duration * 60);
         setStatus('started');
         setStarted(true);
+      } else {
+        console.error('Exam not found');
+        navigate('/dashboard');
       }
       setLoading(false);
+    }, (error) => {
+      console.error('Error fetching exam:', error);
+      setLoading(false);
+      // This will be caught by ErrorBoundary if it's a permission error
+      throw error;
     });
     return () => unsubscribe();
-  }, [examId]);
+  }, [examId, navigate]);
 
   // Tab Visibility Detection (Anti-Cheat)
   useEffect(() => {
@@ -94,7 +102,12 @@ export default function ExamPage({ user }: ExamPageProps) {
     
     // Attempt to enter fullscreen
     try {
-      document.documentElement.requestFullscreen();
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch(err => {
+          console.warn('Fullscreen request rejected:', err);
+        });
+      }
     } catch (e) {
       console.error('Fullscreen request failed');
     }
@@ -153,7 +166,10 @@ export default function ExamPage({ user }: ExamPageProps) {
       // Calculate score
       let calculatedScore = 0;
       exam.questions.forEach(q => {
-        if (answers[q.id] === q.correctAnswer) {
+        // Compare option text (string) with correct answer text
+        // Note: Question.correctAnswer is the INDEX of the correct option
+        const correctOptionText = q.options[q.correctAnswer];
+        if (answers[q.id] === correctOptionText) {
           calculatedScore += 1;
         }
       });
@@ -262,6 +278,18 @@ export default function ExamPage({ user }: ExamPageProps) {
           <button onClick={() => navigate('/dashboard')} className="mt-6 w-full text-gray-500 hover:text-gray-700 font-medium flex items-center justify-center gap-2">
             <ArrowLeft size={18} /> Back to Login
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!exam.questions || exam.questions.length === 0) {
+    return (
+      <div className="max-w-xl mx-auto px-6 py-20 text-center">
+        <div className="bg-white rounded-xl p-12 shadow-2xl border border-red-100">
+          <h2 className="text-2xl font-bold text-red-600 mb-4">No Questions Found</h2>
+          <p className="text-gray-600 mb-8">This exam doesn't have any questions yet. Please contact the administrator.</p>
+          <button onClick={() => navigate('/dashboard')} className="btn-secondary w-full">Back to Dashboard</button>
         </div>
       </div>
     );
