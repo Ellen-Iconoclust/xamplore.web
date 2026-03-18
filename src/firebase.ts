@@ -14,12 +14,31 @@ const firebaseConfig = {
 
 const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || '(default)';
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app, databaseId);
-export const googleProvider = new GoogleAuthProvider();
+// Initialize Firebase only if config is present, otherwise export placeholders
+let app;
+let auth: any;
+let db: any;
+let googleProvider: any;
+
+if (firebaseConfig.apiKey) {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app, databaseId);
+    googleProvider = new GoogleAuthProvider();
+  } catch (error) {
+    console.error('Firebase initialization failed:', error);
+  }
+} else {
+  console.error('Firebase API Key is missing. Please check your environment variables in Vercel.');
+}
+
+export { auth, db, googleProvider };
 
 export const signInWithGoogle = async () => {
+  if (!auth) {
+    throw new Error('Firebase Auth is not initialized. Please check your configuration.');
+  }
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
@@ -44,7 +63,10 @@ export const signInWithGoogle = async () => {
   }
 };
 
-export const logout = () => signOut(auth);
+export const logout = () => {
+  if (auth) return signOut(auth);
+  return Promise.reject('Auth not initialized');
+};
 
 export enum OperationType {
   CREATE = 'create',
@@ -78,12 +100,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
+      userId: auth?.currentUser?.uid,
+      email: auth?.currentUser?.email,
+      emailVerified: auth?.currentUser?.emailVerified,
+      isAnonymous: auth?.currentUser?.isAnonymous,
+      tenantId: auth?.currentUser?.tenantId,
+      providerInfo: auth?.currentUser?.providerData.map(provider => ({
         providerId: provider.providerId,
         displayName: provider.displayName,
         email: provider.email,
