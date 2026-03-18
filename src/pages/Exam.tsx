@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot, collection, addDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User, Exam } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -18,7 +18,7 @@ export default function ExamPage({ user }: ExamPageProps) {
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, number>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [tabSwitches, setTabSwitches] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -29,27 +29,73 @@ export default function ExamPage({ user }: ExamPageProps) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!examId || !db) return;
-    const unsubscribe = onSnapshot(doc(db, 'exams', examId), (snapshot) => {
-      if (snapshot.exists()) {
-        const examData = { id: snapshot.id, ...snapshot.data() } as Exam;
-        setExam(examData);
-        setTimeLeft(examData.duration * 60);
-        setStatus('started');
-        setStarted(true);
-      } else {
-        console.error('Exam not found');
-        navigate('/dashboard');
+    if (!examId || !db || !user) return;
+
+    const initExam = async () => {
+      setLoading(true);
+      try {
+        // 1. Check for existing submission first
+        const q = query(
+          collection(db, 'submissions'), 
+          where('userId', '==', user.uid), 
+          where('examId', '==', examId)
+        );
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+          const submissions = snapshot.docs.map(d => d.data());
+          console.log('Existing submissions found:', submissions);
+          
+          const isSubmitted = submissions.some(s => s.status === 'submitted');
+          const isFailed = submissions.some(s => s.status === 'failed');
+
+          if (isSubmitted) {
+            alert('You have already completed this exam.');
+            navigate('/dashboard');
+            return;
+          } else if (isFailed) {
+            alert('This exam is blocked due to malpractice.');
+            navigate('/dashboard');
+            return;
+          }
+          // If all submissions are 'retake_allowed', we continue
+        }
+
+        // 2. If no submission, listen to exam data
+        const unsubscribe = onSnapshot(doc(db, 'exams', examId), (examSnap) => {
+          console.log('Exam snapshot received:', examSnap.exists());
+          if (examSnap.exists()) {
+            const examData = { id: examSnap.id, ...examSnap.data() } as Exam;
+            console.log('Exam data:', examData);
+            setExam(examData);
+            setTimeLeft(examData.duration * 60);
+            setStatus('started');
+            setStarted(true);
+          } else {
+            console.error('Exam not found in Firestore for ID:', examId);
+            alert('Error: Exam not found. Please contact the administrator.');
+            navigate('/dashboard');
+          }
+          setLoading(false);
+        }, (error) => {
+          console.error('Error fetching exam:', error);
+          alert('Error fetching exam data: ' + error.message);
+          setLoading(false);
+          navigate('/dashboard');
+        });
+
+        return unsubscribe;
+      } catch (error) {
+        console.error('Error initializing exam:', error);
+        setLoading(false);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching exam:', error);
-      setLoading(false);
-      // This will be caught by ErrorBoundary if it's a permission error
-      throw error;
-    });
-    return () => unsubscribe();
-  }, [examId, navigate]);
+    };
+
+    const cleanupPromise = initExam();
+    return () => {
+      cleanupPromise.then(unsub => unsub && unsub());
+    };
+  }, [examId, user.uid, navigate]);
 
   // Tab Visibility Detection (Anti-Cheat)
   useEffect(() => {
@@ -143,7 +189,7 @@ export default function ExamPage({ user }: ExamPageProps) {
   }, [status, timeLeft]);
 
   const triggerFail = async (reason: string) => {
-    if (!examId) return;
+    if (!examId || !exam) return;
     try {
       document.exitFullscreen().catch(() => {});
     } catch (e) {}
@@ -154,6 +200,7 @@ export default function ExamPage({ user }: ExamPageProps) {
       userName: user.displayName,
       status: 'failed',
       reason: reason,
+      pattern: exam.pattern,
       tabSwitches: tabSwitches + 1,
       submittedAt: serverTimestamp()
     });
@@ -167,10 +214,8 @@ export default function ExamPage({ user }: ExamPageProps) {
       // Calculate score
       let calculatedScore = 0;
       exam.questions.forEach(q => {
-        // Compare option text (string) with correct answer text
-        // Note: Question.correctAnswer is the INDEX of the correct option
-        const correctOptionText = q.options[q.correctAnswer];
-        if (answers[q.id] === correctOptionText) {
+        // Compare selected index with correct answer index
+        if (answers[q.id] === q.correctAnswer) {
           calculatedScore += 1;
         }
       });
@@ -252,32 +297,21 @@ export default function ExamPage({ user }: ExamPageProps) {
           <div className="mb-8">
             <XCircle size={64} className="mx-auto text-red-500" />
           </div>
-          <h2 className="text-3xl font-bold text-red-600 brand mb-4">Test Failed</h2>
-          <p className="text-gray-600 mb-8">Malpractice detected or window focus lost.</p>
+          <h2 className="text-3xl font-bold text-red-600 brand mb-4">Test Blocked</h2>
+          <p className="text-gray-600 mb-8">Malpractice detected (tab switching or window focus loss).</p>
           
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-8 text-left">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-red-500 shrink-0" size={24} />
               <div>
-                <p className="font-bold text-red-700 text-sm mb-1">Second Chance Required</p>
-                <p className="text-xs text-red-600">Please ask the invigilator for the one-time retry code.</p>
+                <p className="font-bold text-red-700 text-sm mb-1">Access Restricted</p>
+                <p className="text-xs text-red-600">Your attempt has been logged. You cannot retake this exam until an administrator clears your status.</p>
               </div>
             </div>
           </div>
           
-          <input 
-            type="text" 
-            className="w-full p-3 border border-gray-300 rounded-lg text-center tracking-widest text-lg font-mono mb-4" 
-            placeholder="XXXXX" 
-            maxLength={5}
-          />
-          
-          <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-lg font-bold shadow-lg transition">
-            Retry Exam
-          </button>
-          
-          <button onClick={() => navigate('/dashboard')} className="mt-6 w-full text-gray-500 hover:text-gray-700 font-medium flex items-center justify-center gap-2">
-            <ArrowLeft size={18} /> Back to Login
+          <button onClick={() => navigate('/dashboard')} className="w-full bg-gray-600 hover:bg-gray-700 text-white p-4 rounded-lg font-bold shadow-lg transition flex items-center justify-center gap-2">
+            <ArrowLeft size={18} /> Return to Dashboard
           </button>
         </div>
       </div>
@@ -376,26 +410,32 @@ export default function ExamPage({ user }: ExamPageProps) {
             <div className="flex flex-col md:flex-row gap-8">
               {/* Options */}
               <div className="md:w-2/5 space-y-3">
-                {currentQuestion.options.map((option, i) => (
-                  <label 
-                    key={i}
-                    className={`flex items-center cursor-pointer p-4 rounded-lg border transition-all duration-200 ${
-                      answers[currentQuestion.id] === option 
-                      ? 'bg-emerald-50 border-emerald-500 shadow-sm' 
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <input 
-                      type="radio" 
-                      name="ans" 
-                      value={option}
-                      checked={answers[currentQuestion.id] === option}
-                      onChange={() => setAnswers({...answers, [currentQuestion.id]: option})}
-                      className="mr-4 h-5 w-5 text-emerald-600 shrink-0"
-                    />
-                    <span className="text-gray-700 font-medium">{option}</span>
-                  </label>
-                ))}
+                {currentQuestion.options.map((option, i) => {
+                  const optionId = `q-${currentQuestion.id}-opt-${i}`;
+                  const isSelected = answers[currentQuestion.id] === i;
+                  return (
+                    <label 
+                      key={i}
+                      htmlFor={optionId}
+                      className={`flex items-center cursor-pointer p-4 rounded-lg border transition-all duration-200 ${
+                        isSelected 
+                        ? 'bg-emerald-50 border-emerald-500 shadow-sm' 
+                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <input 
+                        id={optionId}
+                        type="radio" 
+                        name={`question-${currentQuestion.id}`} 
+                        value={i}
+                        checked={isSelected}
+                        onChange={() => setAnswers({...answers, [currentQuestion.id]: i})}
+                        className="mr-4 h-5 w-5 text-emerald-600 shrink-0"
+                      />
+                      <span className="text-gray-700 font-medium">{option}</span>
+                    </label>
+                  );
+                })}
               </div>
               
               {/* QR Code */}
@@ -410,26 +450,20 @@ export default function ExamPage({ user }: ExamPageProps) {
             </div>
           </div>
 
-          <div className="mt-12 flex justify-between items-center gap-4">
-            <button 
-              disabled={currentQuestionIndex === 0}
-              onClick={() => setCurrentQuestionIndex(prev => prev - 1)}
-              className="flex items-center gap-2 px-8 py-3 bg-white border border-gray-300 rounded-lg font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-30 transition shadow-sm"
-            >
-              <ArrowLeft size={20} /> Previous
-            </button>
-            
+          <div className="mt-12 flex justify-end items-center gap-4">
             {currentQuestionIndex === exam.questions.length - 1 ? (
               <button 
+                disabled={answers[currentQuestion.id] === undefined}
                 onClick={() => setIsWaiting(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-10 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-10 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Submit Exam
               </button>
             ) : (
               <button 
+                disabled={answers[currentQuestion.id] === undefined}
                 onClick={() => setCurrentQuestionIndex(prev => prev + 1)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next <ArrowRight size={20} />
               </button>
