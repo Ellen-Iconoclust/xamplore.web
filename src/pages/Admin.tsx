@@ -3,7 +3,7 @@ import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateD
 import { db } from '../firebase';
 import { User, Exam, Question, Resource } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, Settings, Users, BookOpen, ShieldCheck, Loader2, Save, X } from 'lucide-react';
+import { Plus, Trash2, Edit3, Settings, Users, BookOpen, ShieldCheck, Loader2, Save, X, RotateCcw } from 'lucide-react';
 
 interface AdminProps {
   user: User;
@@ -12,8 +12,9 @@ interface AdminProps {
 export default function Admin({ user }: AdminProps) {
   const [exams, setExams] = useState<Exam[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'exams' | 'resources' | 'users'>('exams');
+  const [activeTab, setActiveTab] = useState<'exams' | 'resources' | 'submissions'>('exams');
   
   // New Exam State
   const [showExamModal, setShowExamModal] = useState(false);
@@ -46,15 +47,22 @@ export default function Admin({ user }: AdminProps) {
 
     const unsubscribeResources = onSnapshot(collection(db, 'resources'), (snapshot) => {
       setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Resource)));
-      setLoading(false);
     }, (error) => {
       console.error('Error listening to resources:', error);
+    });
+
+    const unsubscribeSubmissions = onSnapshot(query(collection(db, 'submissions'), orderBy('submittedAt', 'desc')), (snapshot) => {
+      setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error('Error listening to submissions:', error);
       setLoading(false);
     });
 
     return () => {
       unsubscribeExams();
       unsubscribeResources();
+      unsubscribeSubmissions();
     };
   }, []);
 
@@ -133,15 +141,29 @@ export default function Admin({ user }: AdminProps) {
     });
   };
 
+  const [confirmingExamDeleteId, setConfirmingExamDeleteId] = useState<string | null>(null);
+
   const handleDeleteExam = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this exam?')) {
+    try {
       await deleteDoc(doc(db, 'exams', id));
+      setConfirmingExamDeleteId(null);
+    } catch (error) {
+      console.error('Error deleting exam:', error);
     }
   };
 
   const toggleExamStatus = async (exam: Exam) => {
     const newStatus = exam.status === 'active' ? 'completed' : 'active';
     await updateDoc(doc(db, 'exams', exam.id), { status: newStatus });
+  };
+
+  const handleResetSubmission = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'submissions', id), { status: 'retake_allowed' });
+    } catch (error: any) {
+      console.error('Error resetting submission:', error);
+      alert('Error resetting submission: ' + error.message);
+    }
   };
 
   if (loading) {
@@ -171,6 +193,12 @@ export default function Admin({ user }: AdminProps) {
             className={`px-6 py-3 rounded-xl text-sm font-bold uppercase tracking-widest text-[10px] transition-all ${activeTab === 'resources' ? 'bg-emerald-900 text-white shadow-lg shadow-emerald-900/20' : 'text-secondary/60 hover:bg-emerald-50'}`}
           >
             Resources
+          </button>
+          <button 
+            onClick={() => setActiveTab('submissions')}
+            className={`px-6 py-3 rounded-xl text-sm font-bold uppercase tracking-widest text-[10px] transition-all ${activeTab === 'submissions' ? 'bg-emerald-900 text-white shadow-lg shadow-emerald-900/20' : 'text-secondary/60 hover:bg-emerald-50'}`}
+          >
+            Submissions
           </button>
         </div>
       </div>
@@ -208,9 +236,26 @@ export default function Admin({ user }: AdminProps) {
                       <button onClick={() => toggleExamStatus(exam)} className="p-2 text-secondary/40 hover:text-primary transition-colors" title="Toggle Status">
                         <Settings size={18} />
                       </button>
-                      <button onClick={() => handleDeleteExam(exam.id)} className="p-2 text-secondary/40 hover:text-red-500 transition-colors" title="Delete">
-                        <Trash2 size={18} />
-                      </button>
+                      {confirmingExamDeleteId === exam.id ? (
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => handleDeleteExam(exam.id)}
+                            className="bg-red-500 text-white px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-red-600 transition-all"
+                          >
+                            Confirm?
+                          </button>
+                          <button 
+                            onClick={() => setConfirmingExamDeleteId(null)}
+                            className="p-1 text-secondary/40 hover:text-secondary transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmingExamDeleteId(exam.id)} className="p-2 text-secondary/40 hover:text-red-500 transition-colors" title="Delete">
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </div>
                   </div>
                   <h3 className="text-xl font-bold mb-3 text-secondary group-hover:text-primary transition-colors">{exam.title}</h3>
@@ -270,6 +315,87 @@ export default function Admin({ user }: AdminProps) {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'submissions' && (
+        <div className="space-y-8">
+          <div className="flex justify-between items-center">
+            <h2 className="font-display text-2xl uppercase tracking-tight flex items-center gap-3 text-secondary">
+              <Users className="text-primary" />
+              Student Submissions
+            </h2>
+          </div>
+          
+          <div className="bg-white rounded-[40px] border border-emerald-100 overflow-hidden shadow-sm">
+            <table className="w-full text-left">
+              <thead className="bg-emerald-50/50 text-[10px] font-bold uppercase tracking-widest text-secondary/40">
+                <tr>
+                  <th className="px-8 py-6">Student</th>
+                  <th className="px-8 py-6">Exam Pattern</th>
+                  <th className="px-8 py-6">Status</th>
+                  <th className="px-8 py-6">Score / Reason</th>
+                  <th className="px-8 py-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-emerald-50">
+                {submissions.map((sub) => (
+                  <tr key={sub.id} className="hover:bg-emerald-50/30 transition-colors">
+                    <td className="px-8 py-6">
+                      <p className="font-bold text-secondary text-sm">{sub.userName}</p>
+                      <p className="text-[10px] text-secondary/40 font-mono">{sub.userId}</p>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-widest rounded-full border border-emerald-100">
+                        Pattern {sub.pattern || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full border ${
+                        sub.status === 'submitted' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                        sub.status === 'retake_allowed' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                        'bg-red-50 text-red-600 border-red-100'
+                      }`}>
+                        {sub.status === 'retake_allowed' ? 'Retake Allowed' : sub.status}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6">
+                      {sub.status === 'submitted' ? (
+                        <p className="text-sm font-bold text-emerald-600">{sub.score} / {sub.totalQuestions}</p>
+                      ) : (
+                        <p className="text-xs text-red-500 font-medium italic">{sub.reason || 'Malpractice detected'}</p>
+                      )}
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      {sub.status === 'failed' && (
+                        <button 
+                          onClick={() => handleResetSubmission(sub.id)}
+                          className="flex items-center gap-2 bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-200 transition-all ml-auto"
+                        >
+                          <RotateCcw size={14} /> Allow Retry
+                        </button>
+                      )}
+                      {sub.status === 'retake_allowed' && (
+                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
+                          Retry Granted
+                        </span>
+                      )}
+                      {sub.status === 'submitted' && (
+                        <button className="p-2 text-secondary/40 hover:text-red-500 transition-colors">
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {submissions.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-8 py-12 text-center text-secondary/40 italic">No submissions found.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
