@@ -25,14 +25,20 @@ export default function Dashboard({ user }: DashboardProps) {
   useEffect(() => {
     // Fetch completed patterns for this user
     const fetchCompleted = async () => {
-      const q = query(collection(db, 'submissions'), where('userId', '==', user.uid), where('status', '==', 'submitted'));
-      const snapshot = await getDocs(q);
-      const patterns = snapshot.docs.map(doc => doc.data().pattern);
-      setCompletedPatterns(patterns);
+      if (!db) return;
+      try {
+        const q = query(collection(db, 'submissions'), where('userId', '==', user.uid), where('status', '==', 'submitted'));
+        const snapshot = await getDocs(q);
+        const patterns = snapshot.docs.map(doc => doc.data().pattern);
+        setCompletedPatterns(patterns);
+      } catch (error) {
+        console.error('Error fetching completed patterns:', error);
+      }
     };
     fetchCompleted();
 
     // Fetch active exams
+    if (!db) return;
     const unsubExams = onSnapshot(query(collection(db, 'exams'), where('status', '==', 'active')), (snapshot) => {
       const allActiveExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
       // Filter by allowedEmails if the list is not empty
@@ -42,6 +48,8 @@ export default function Dashboard({ user }: DashboardProps) {
         exam.allowedEmails.includes(user.email)
       );
       setActiveExams(filteredExams);
+    }, (error) => {
+      console.error('Error listening to exams:', error);
     });
 
     // Listen for exam window status
@@ -49,6 +57,8 @@ export default function Dashboard({ user }: DashboardProps) {
       if (doc.exists()) {
         setExamWindow(doc.data());
       }
+    }, (error) => {
+      console.error('Error listening to settings:', error);
     });
     return () => {
       unsubExams();
@@ -104,12 +114,20 @@ export default function Dashboard({ user }: DashboardProps) {
   };
 
   const startExam = () => {
+    if (!db) return;
     // Find the exam ID for this pattern
     const fetchAndNavigate = async () => {
-      const q = query(collection(db, 'exams'), where('pattern', '==', pattern));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        navigate(`/exam/${snapshot.docs[0].id}`);
+      try {
+        const q = query(collection(db, 'exams'), where('pattern', '==', pattern));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          navigate(`/exam/${snapshot.docs[0].id}`);
+        } else {
+          setWarning('Exam data not found for this pattern.');
+        }
+      } catch (error) {
+        console.error('Error starting exam:', error);
+        setWarning('Failed to start exam. Please check your connection.');
       }
     };
     fetchAndNavigate();
