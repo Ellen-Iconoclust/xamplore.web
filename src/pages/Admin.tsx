@@ -37,12 +37,18 @@ export default function Admin({ user }: AdminProps) {
   });
 
   useEffect(() => {
+    if (!db) return;
     const unsubscribeExams = onSnapshot(query(collection(db, 'exams'), orderBy('status', 'desc')), (snapshot) => {
       setExams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam)));
+    }, (error) => {
+      console.error('Error listening to exams:', error);
     });
 
     const unsubscribeResources = onSnapshot(collection(db, 'resources'), (snapshot) => {
       setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Resource)));
+      setLoading(false);
+    }, (error) => {
+      console.error('Error listening to resources:', error);
       setLoading(false);
     });
 
