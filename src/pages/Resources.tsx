@@ -1,65 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Star, PlayCircle, ExternalLink, Code, ChevronDown, ChevronUp, Share2, User, BookOpen, Send, XCircle, Loader2, Sparkles, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-
-const coursesData: any = {
-  c: [
-    {
-      title: "C Programming For Beginners - Full Course",
-      instructor: "freeCodeCamp",
-      url: "https://youtu.be/KJgsSFOSQv0",
-      description: "Master C programming from scratch with hands-on exercises and practical examples.",
-      rating: "4.9",
-      duration: "4 hours",
-      level: "Beginner",
-      tags: ["c", "beginner", "complete-course"]
-    },
-    {
-      title: "C Programming Tutorial for Beginners",
-      instructor: "Programming with Mosh",
-      url: "https://youtu.be/KJgsSFOSQv0",
-      description: "Learn C fundamentals with clear explanations and real-world programming concepts.",
-      rating: "4.8",
-      duration: "3.5 hours",
-      level: "Beginner",
-      tags: ["c", "basics", "tutorial"]
-    },
-    // ... more data can be added here
-  ],
-  cpp: [
-    {
-      title: "C++ Programming Course - Beginner to Advanced",
-      instructor: "freeCodeCamp",
-      url: "https://youtu.be/vLnPwxZdW4Y",
-      description: "Complete C++ tutorial covering from basics to STL and OOP concepts.",
-      rating: "4.9",
-      duration: "31 hours",
-      level: "All Levels",
-      tags: ["cpp", "complete", "stl"]
-    }
-  ],
-  python: [
-    {
-      title: "Python for Everybody - Full University Course",
-      instructor: "freeCodeCamp",
-      url: "https://youtu.be/8DvywoWv6fI",
-      description: "Comprehensive Python course covering basics to web scraping and databases.",
-      rating: "4.9",
-      duration: "15 hours",
-      level: "Beginner",
-      tags: ["python", "complete", "university"]
-    }
-  ],
-  java: [],
-  javascript: [],
-  web: [],
-  frameworks: []
-};
+import { coursesData } from '../data/coursesData';
 
 export default function Resources() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('');
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
+  const [formData, setFormData] = useState({
+    name: '',
+    class: '',
+    title: '',
+    description: '',
+    instructor: '',
+    url: ''
+  });
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus('submitting');
+    
+    try {
+      const response = await fetch('https://formspree.io/f/xzdelqel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+      
+      if (response.ok) {
+        setStatus('success');
+        setFormData({
+          name: '',
+          class: '',
+          title: '',
+          description: '',
+          instructor: '',
+          url: ''
+        });
+        // Reset success message after 5 seconds
+        setTimeout(() => setStatus('idle'), 5000);
+      } else {
+        setStatus('error');
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      setStatus('error');
+    }
+  };
 
   const toggleSection = (lang: string) => {
     setExpandedSections(prev => 
@@ -255,20 +250,99 @@ export default function Resources() {
               </p>
             </div>
             
-            <form className="max-w-2xl mx-auto space-y-6">
+            <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <input type="text" placeholder="Your Name" className="input-field" />
-                <input type="text" placeholder="Class/Department" className="input-field" />
+                <input 
+                  type="text" 
+                  name="name"
+                  placeholder="Your Name" 
+                  className="input-field" 
+                  required
+                  value={formData.name}
+                  onChange={handleInputChange}
+                />
+                <input 
+                  type="text" 
+                  name="class"
+                  placeholder="Class/Department" 
+                  className="input-field" 
+                  required
+                  value={formData.class}
+                  onChange={handleInputChange}
+                />
               </div>
-              <input type="text" placeholder="Course/Video Title" className="input-field" />
-              <textarea placeholder="Short Description" className="input-field min-h-[100px]" />
+              <input 
+                type="text" 
+                name="title"
+                placeholder="Course/Video Title" 
+                className="input-field" 
+                required
+                value={formData.title}
+                onChange={handleInputChange}
+              />
+              <textarea 
+                name="description"
+                placeholder="Short Description" 
+                className="input-field min-h-[100px]" 
+                required
+                value={formData.description}
+                onChange={handleInputChange}
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <input type="text" placeholder="Channel/Tutor Name" className="input-field" />
-                <input type="url" placeholder="Course URL (YouTube/Link)" className="input-field" />
+                <input 
+                  type="text" 
+                  name="instructor"
+                  placeholder="Channel/Tutor Name" 
+                  className="input-field" 
+                  required
+                  value={formData.instructor}
+                  onChange={handleInputChange}
+                />
+                <input 
+                  type="url" 
+                  name="url"
+                  placeholder="Course URL (YouTube/Link)" 
+                  className="input-field" 
+                  required
+                  value={formData.url}
+                  onChange={handleInputChange}
+                />
               </div>
-              <button type="button" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-lg transition flex items-center justify-center gap-2">
-                <Send size={20} /> Submit for Review
+              <button 
+                type="submit" 
+                disabled={status === 'submitting'}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {status === 'submitting' ? (
+                  <>
+                    <Loader2 className="animate-spin" size={20} /> Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} /> Submit for Review
+                  </>
+                )}
               </button>
+              
+              {status === 'success' && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center text-emerald-600 font-bold mt-4"
+                >
+                  Your submission is sent
+                </motion.div>
+              )}
+              
+              {status === 'error' && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center text-red-600 font-bold mt-4"
+                >
+                  Something went wrong. Please try again.
+                </motion.div>
+              )}
             </form>
           </div>
         </div>
