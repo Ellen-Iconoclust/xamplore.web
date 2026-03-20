@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { WORDS } from '../data/hangmanWords';
 import { LOGIC_PUZZLES } from '../data/logicPuzzles';
 import { WORDLE_WORDS } from '../data/wordleWords';
+import { getDailyWordObj } from '../utils/wordle';
 
 export default function Games() {
   const [activeGame, setActiveGame] = useState<'hangman' | 'logic' | 'wordle'>('hangman');
@@ -25,19 +26,6 @@ export default function Games() {
   const [logicFeedback, setLogicFeedback] = useState<{ correct: boolean; message: string } | null>(null);
 
   // Tech Wordle State
-  const getDailyWordObj = React.useCallback(() => {
-    const today = new Date();
-    const dateString = today.toISOString().split('T')[0];
-    
-    let hash = 0;
-    for (let i = 0; i < dateString.length; i++) {
-      hash = ((hash << 5) - hash) + dateString.charCodeAt(i);
-      hash |= 0;
-    }
-    const index = Math.abs(hash) % WORDLE_WORDS.length;
-    return WORDLE_WORDS[index];
-  }, []);
-
   const [wordleTargetObj, setWordleTargetObj] = useState(getDailyWordObj);
   const wordleTarget = wordleTargetObj.word.toUpperCase();
   
