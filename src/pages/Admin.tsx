@@ -3,7 +3,8 @@ import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateD
 import { db } from '../firebase';
 import { User, Exam, Question, Resource } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, Settings, Users, BookOpen, ShieldCheck, Loader2, Save, X, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Edit3, Settings, Users, BookOpen, ShieldCheck, Loader2, Save, X, RotateCcw, Lightbulb, Star } from 'lucide-react';
+import { getDailyWordObj } from '../utils/wordle';
 
 interface AdminProps {
   user: User;
@@ -15,6 +16,8 @@ export default function Admin({ user }: AdminProps) {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'exams' | 'resources' | 'submissions'>('exams');
+  
+  const dailyWord = getDailyWordObj();
   
   // New Exam State
   const [showExamModal, setShowExamModal] = useState(false);
@@ -198,6 +201,21 @@ export default function Admin({ user }: AdminProps) {
           <h1 className="font-display text-4xl uppercase tracking-tight mb-2 text-secondary">Admin Dashboard</h1>
           <p className="text-secondary/50">Manage exams, learning resources, and student access.</p>
         </div>
+
+        {/* Wordle Word of the Day Card */}
+        <div className="bg-white border border-emerald-100 rounded-[40px] p-6 shadow-sm flex items-center gap-6 max-w-md">
+          <div className="bg-emerald-100 p-4 rounded-3xl text-emerald-600">
+            <Star size={32} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Wordle Word of the Day</span>
+            </div>
+            <h3 className="text-2xl font-bold text-secondary uppercase tracking-tight">{dailyWord.word}</h3>
+            <p className="text-xs text-secondary/50 italic line-clamp-1" title={dailyWord.definition}>{dailyWord.definition}</p>
+          </div>
+        </div>
+
         <div className="flex bg-white p-1 rounded-2xl border border-emerald-100 shadow-sm">
           <button 
             onClick={() => setActiveTab('exams')}
