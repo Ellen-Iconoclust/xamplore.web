@@ -67,6 +67,16 @@
   animation: gradient-pulse 8s ease-in-out infinite;
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
 .line-clamp-2 {
   overflow: hidden;
   display: -webkit-box;
