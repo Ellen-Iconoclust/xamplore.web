@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User, Exam } from '../types';
@@ -13,6 +13,9 @@ interface ExamPageProps {
 export default function ExamPage({ user }: ExamPageProps) {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const enteredName = queryParams.get('name') || user.displayName || 'Anonymous Student';
   
   const [exam, setExam] = useState<Exam | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,6 +93,7 @@ export default function ExamPage({ user }: ExamPageProps) {
               startedAt: serverTimestamp(),
               specialLoginExpiry: null,
               tabSwitches: 0,
+              userName: enteredName,
               answers: {}
             });
           }
@@ -98,7 +102,7 @@ export default function ExamPage({ user }: ExamPageProps) {
           await addDoc(collection(db, 'submissions'), {
             examId: examId,
             userId: user.uid,
-            userName: user.displayName,
+            userName: enteredName,
             status: 'in-progress',
             startedAt: serverTimestamp(),
             tabSwitches: 0,
@@ -305,7 +309,7 @@ export default function ExamPage({ user }: ExamPageProps) {
           </div>
           <h2 className="text-3xl font-bold text-emerald-600 brand mb-4">Test Completed Successfully!</h2>
           <p className="text-lg font-semibold text-gray-700 mb-8">
-            {user.displayName} — Pattern {exam.pattern} — Score {score}/{exam.questions.length}
+            {enteredName} — Pattern {exam.pattern} — Score {score}/{exam.questions.length}
           </p>
           
           <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-lg mb-8">
