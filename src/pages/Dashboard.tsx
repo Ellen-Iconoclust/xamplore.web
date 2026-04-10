@@ -13,17 +13,17 @@ interface DashboardProps {
 export default function Dashboard({ user }: DashboardProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState<'login' | 'rules'>('login');
-  const [name, setName] = useState(user.displayName);
-  const [pattern, setPattern] = useState('');
+  const [name, setName] = useState(user.displayName || '');
+  const [selectedExamId, setSelectedExamId] = useState('');
   const [password, setPassword] = useState('');
   const [warning, setWarning] = useState('');
   const [loading, setLoading] = useState(false);
-  const [completedPatterns, setCompletedPatterns] = useState<string[]>([]);
-  const [failedPatterns, setFailedPatterns] = useState<string[]>([]);
+  const [completedExamIds, setCompletedExamIds] = useState<string[]>([]);
+  const [failedExamIds, setFailedExamIds] = useState<string[]>([]);
   const [examWindow, setExamWindow] = useState<any>(null);
   const [activeExams, setActiveExams] = useState<Exam[]>([]);
   const [loginCountdown, setLoginCountdown] = useState<Record<string, number>>({});
-  const [specialLoginCountdown, setSpecialLoginCountdown] = useState<Record<string, {pattern: string, seconds: number}>>({});
+  const [specialLoginCountdown, setSpecialLoginCountdown] = useState<Record<string, {examId: string, pattern: string, seconds: number}>>({});
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -62,7 +62,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
     const unsubSpecial = onSnapshot(qSpecial, (snapshot) => {
       const updateTimer = () => {
-        const newCountdowns: Record<string, {pattern: string, seconds: number}> = {};
+        const newCountdowns: Record<string, {examId: string, pattern: string, seconds: number}> = {};
         snapshot.docs.forEach(doc => {
           const data = doc.data();
           if (data.specialLoginExpiry) {
@@ -70,6 +70,7 @@ export default function Dashboard({ user }: DashboardProps) {
             const now = new Date();
             const diffSeconds = Math.floor((expiry.getTime() - now.getTime()) / 1000);
             newCountdowns[doc.id] = {
+              examId: data.examId,
               pattern: data.pattern,
               seconds: Math.max(0, diffSeconds)
             };
@@ -97,15 +98,15 @@ export default function Dashboard({ user }: DashboardProps) {
       
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (data.status === 'submitted' && data.pattern) {
-          completed.push(data.pattern);
-        } else if (data.status === 'failed' && data.pattern) {
-          failed.push(data.pattern);
+        if (data.status === 'submitted' && data.examId) {
+          completed.push(data.examId);
+        } else if (data.status === 'failed' && data.examId) {
+          failed.push(data.examId);
         }
       });
       
-      setCompletedPatterns(completed);
-      setFailedPatterns(failed);
+      setCompletedExamIds(completed);
+      setFailedExamIds(failed);
     }, (error) => {
       console.error('Error listening to user patterns:', error);
     });
@@ -140,19 +141,44 @@ export default function Dashboard({ user }: DashboardProps) {
     };
   }, [user.uid]);
 
+  const isLoginWindowClosed = (examId: string) => {
+    if (!examId) return false;
+    const exam = activeExams.find(e => e.id === examId);
+    if (!exam || !exam.startTime || !exam.loginWindow) return false;
+    
+    const startTime = exam.startTime.toDate();
+    const now = new Date();
+    const diffMins = (now.getTime() - startTime.getTime()) / (1000 * 60);
+    
+    // Check for special login first
+    const specialLogin = Object.values(specialLoginCountdown).find((s: any) => s.examId === examId && s.seconds > 0);
+    if (specialLogin) return false;
+
+    // If diffMins is negative, the exam hasn't started yet. 
+    if (diffMins < 0) return false; 
+
+    return diffMins > exam.loginWindow;
+  };
+
   const handleContinue = async () => {
-    if (!name || !pattern || !password) {
+    if (!name || !selectedExamId || !password) {
       setWarning('Please fill all fields');
       return;
     }
 
-    if (completedPatterns.includes(pattern)) {
-      setWarning(`Pattern ${pattern} is already completed. You cannot retake it.`);
+    const examData = activeExams.find(e => e.id === selectedExamId);
+    if (!examData) {
+      setWarning('Invalid Exam Selection');
       return;
     }
 
-    if (failedPatterns.includes(pattern)) {
-      setWarning(`Pattern ${pattern} is blocked due to malpractice. Please contact the administrator.`);
+    if (completedExamIds.includes(selectedExamId)) {
+      setWarning(`You have already completed this exam (Pattern ${examData.pattern}). You cannot retake it.`);
+      return;
+    }
+
+    if (failedExamIds.includes(selectedExamId)) {
+      setWarning(`This exam (Pattern ${examData.pattern}) is blocked due to malpractice. Please contact the administrator.`);
       return;
     }
 
@@ -161,7 +187,7 @@ export default function Dashboard({ user }: DashboardProps) {
       const qCheck = query(
         collection(db, 'submissions'), 
         where('userId', '==', user.uid), 
-        where('pattern', '==', pattern)
+        where('examId', '==', selectedExamId)
       );
       const snapshotCheck = await getDocs(qCheck);
       let existingSubmission: any = null;
@@ -171,10 +197,10 @@ export default function Dashboard({ user }: DashboardProps) {
         const isFailed = submissions.some(s => s.status === 'failed');
 
         if (isSubmitted) {
-          setWarning(`Pattern ${pattern} is already completed. You cannot retake it.`);
+          setWarning(`You have already completed this exam.`);
           return;
         } else if (isFailed) {
-          setWarning(`Pattern ${pattern} is blocked due to malpractice. Please contact the administrator.`);
+          setWarning(`This exam is blocked due to malpractice.`);
           return;
         }
         
@@ -185,17 +211,6 @@ export default function Dashboard({ user }: DashboardProps) {
       setLoading(true);
       setWarning('');
 
-      // Verify pattern password
-      const q = query(collection(db, 'exams'), where('pattern', '==', pattern));
-      const snapshot = await getDocs(q);
-      
-      if (snapshot.empty) {
-        setWarning('Invalid Pattern');
-        setLoading(false);
-        return;
-      }
-
-      const examData = snapshot.docs[0].data() as Exam;
       if (examData.password !== password) {
         setWarning('Incorrect Password');
         setLoading(false);
@@ -239,45 +254,8 @@ export default function Dashboard({ user }: DashboardProps) {
   };
 
   const startExam = () => {
-    if (!db) return;
-    // Find the exam ID for this pattern
-    const fetchAndNavigate = async () => {
-      if (!pattern) return;
-      try {
-        // Final check before navigating
-        const qCheck = query(
-          collection(db, 'submissions'), 
-          where('userId', '==', user.uid), 
-          where('pattern', '==', pattern)
-        );
-        const snapshotCheck = await getDocs(qCheck);
-        if (!snapshotCheck.empty) {
-          const submissions = snapshotCheck.docs.map(d => d.data());
-          const isSubmitted = submissions.some(s => s.status === 'submitted');
-          const isFailed = submissions.some(s => s.status === 'failed');
-
-          if (isSubmitted) {
-            setWarning(`Pattern ${pattern} is already completed.`);
-            return;
-          } else if (isFailed) {
-            setWarning(`Pattern ${pattern} is blocked due to malpractice.`);
-            return;
-          }
-        }
-
-        const q = query(collection(db, 'exams'), where('pattern', '==', pattern), where('status', '==', 'active'));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          navigate(`/exam/${snapshot.docs[0].id}`);
-        } else {
-          setWarning('Exam data not found or exam is not active.');
-        }
-      } catch (error) {
-        console.error('Error starting exam:', error);
-        setWarning('Failed to start exam. Please check your connection.');
-      }
-    };
-    fetchAndNavigate();
+    if (!db || !selectedExamId) return;
+    navigate(`/exam/${selectedExamId}?name=${encodeURIComponent(name)}`);
   };
 
   return (
@@ -361,32 +339,32 @@ export default function Dashboard({ user }: DashboardProps) {
               </div>
             )}
 
-            {completedPatterns.length > 0 && (
+            {completedExamIds.length > 0 && (
               <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
                 <div className="flex items-center gap-2 text-sm text-emerald-600 mb-2">
                   <CheckCircle size={18} />
-                  <span className="font-semibold">Completed Patterns:</span>
+                  <span className="font-semibold">Completed Exams:</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {completedPatterns.map(p => (
-                    <span key={p} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                      Pattern {p}
+                  {activeExams.filter(e => completedExamIds.includes(e.id)).map((e, idx) => (
+                    <span key={idx} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                      Pattern {e.pattern}
                     </span>
                   ))}
                 </div>
               </div>
             )}
 
-            {failedPatterns.length > 0 && (
+            {failedExamIds.length > 0 && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
                 <div className="flex items-center gap-2 text-sm text-red-600 mb-2">
                   <AlertCircle size={18} />
-                  <span className="font-semibold text-red-700 uppercase tracking-tighter">Blocked Patterns (Malpractice):</span>
+                  <span className="font-semibold text-red-700 uppercase tracking-tighter">Blocked Exams:</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {failedPatterns.map(p => (
-                    <span key={p} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-200 text-red-900">
-                      Pattern {p}
+                  {activeExams.filter(e => failedExamIds.includes(e.id)).map((e, idx) => (
+                    <span key={idx} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-200 text-red-900">
+                      Pattern {e.pattern}
                     </span>
                   ))}
                 </div>
@@ -403,21 +381,21 @@ export default function Dashboard({ user }: DashboardProps) {
               />
               <select 
                 className="input-field" 
-                value={pattern} 
-                onChange={(e) => setPattern(e.target.value)}
+                value={selectedExamId} 
+                onChange={(e) => setSelectedExamId(e.target.value)}
               >
                 <option value="">Select Pattern</option>
                 {activeExams.map(exam => (
-                  <option key={exam.id} value={exam.pattern}>Pattern {exam.pattern}</option>
+                  <option key={exam.id} value={exam.id}>Pattern {exam.pattern} {exam.title ? `- ${exam.title}` : ''}</option>
                 ))}
               </select>
               
               {/* Selected Pattern Login Window Timer */}
-              {pattern && (
+              {selectedExamId && (
                 <div className="mt-2">
                   {(() => {
                     // Check for special login first
-                    const specialLogin = Object.values(specialLoginCountdown).find((s: any) => s.pattern === pattern && s.seconds > 0);
+                    const specialLogin = Object.values(specialLoginCountdown).find((s: any) => s.examId === selectedExamId && s.seconds > 0);
                     
                     if (specialLogin) {
                       return (
@@ -436,7 +414,7 @@ export default function Dashboard({ user }: DashboardProps) {
                     }
 
                     // Fallback to regular login window
-                    const exam = activeExams.find(e => e.pattern === pattern);
+                    const exam = activeExams.find(e => e.id === selectedExamId);
                     if (!exam) return null;
                     
                     const timeLeft = loginCountdown[exam.id];
@@ -482,10 +460,10 @@ export default function Dashboard({ user }: DashboardProps) {
               
               <button 
                 onClick={handleContinue}
-                disabled={loading || !pattern || completedPatterns.includes(pattern) || failedPatterns.includes(pattern)}
+                disabled={loading || !selectedExamId || !password || isLoginWindowClosed(selectedExamId)}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-semibold transition duration-300 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Checking...' : 'Continue'}
+                {loading ? 'Checking...' : isLoginWindowClosed(selectedExamId) ? 'Login Window Closed' : 'Continue'}
               </button>
               
               {warning && <p className="text-red-500 text-xs mt-2 font-medium">{warning}</p>}
@@ -499,7 +477,7 @@ export default function Dashboard({ user }: DashboardProps) {
             
             {/* Login Window Countdown (Rules Step) */}
             {(() => {
-              const specialLogin = Object.values(specialLoginCountdown).find((s: any) => s.pattern === pattern && s.seconds > 0);
+              const specialLogin = Object.values(specialLoginCountdown).find((s: any) => s.examId === selectedExamId && s.seconds > 0);
               if (specialLogin) {
                 return (
                   <div className="mb-6 p-3 bg-purple-50 border border-purple-100 rounded-lg flex justify-between items-center animate-pulse">
@@ -516,7 +494,7 @@ export default function Dashboard({ user }: DashboardProps) {
                 );
               }
 
-              const exam = activeExams.find(e => e.pattern === pattern);
+              const exam = activeExams.find(e => e.id === selectedExamId);
               if (exam && loginCountdown[exam.id] > 0) {
                 const timeLeft = loginCountdown[exam.id];
                 return (
