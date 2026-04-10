@@ -1,5 +1,9 @@
 import React from 'react';
-import { Shield, CheckCircle2, User, Lock, Clock, BarChart3, Code2, Server, ShieldCheck, Star, Building2, Globe, Zap } from 'lucide-react';
+import { 
+  Shield, CheckCircle2, User, Lock, Clock, BarChart3, Code2, Server, 
+  ShieldCheck, Star, Building2, Globe, Zap, Gamepad2, Brain, Keyboard,
+  MousePointer2, Layout, Database, FileText, Award, Smartphone, Trophy, Target
+} from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function About() {
@@ -85,6 +89,28 @@ export default function About() {
         </motion.div>
       </div>
 
+      {/* Platform Features Grid (New Feature) */}
+      <div className="max-w-7xl mx-auto px-6 mb-20">
+        <h2 className="text-[32px] font-bold mb-12 text-center text-[#1A202C]">Comprehensive Feature Suite</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="p-8 rounded-[32px] bg-white border border-[#E2E8F0] shadow-sm">
+            <Layout className="text-[#059669] mb-4" size={32} />
+            <h3 className="text-xl font-bold mb-3">Intuitive Dashboard</h3>
+            <p className="text-[#718096] text-sm leading-relaxed">A clean, focused interface for students to access their exams, view results, and track their progress without distractions.</p>
+          </div>
+          <div className="p-8 rounded-[32px] bg-[#059669] text-white shadow-md">
+            <Clock className="mb-4" size={32} />
+            <h3 className="text-xl font-bold mb-3">Strict Timing Control</h3>
+            <p className="text-emerald-50 text-sm leading-relaxed">Precision timers ensure that every second counts. Automatic submission at the end of the window guarantees fairness for all candidates.</p>
+          </div>
+          <div className="p-8 rounded-[32px] bg-white border border-[#E2E8F0] shadow-sm">
+            <Award className="text-[#059669] mb-4" size={32} />
+            <h3 className="text-xl font-bold mb-3">Instant Certification</h3>
+            <p className="text-[#718096] text-sm leading-relaxed">Automated grading provides immediate feedback and generates verifiable digital certificates upon successful completion.</p>
+          </div>
+        </div>
+      </div>
+
       {/* How It Works Section */}
       <div className="max-w-7xl mx-auto px-6 mb-20 text-center">
         <h2 className="text-[32px] font-bold mb-12 text-[#1A202C]">How Xamplore Works</h2>
@@ -110,6 +136,32 @@ export default function About() {
               <p className="text-sm text-[#718096]">{item.desc}</p>
             </motion.div>
           ))}
+        </div>
+      </div>
+
+      {/* Gamification Section (New Feature) */}
+      <div className="max-w-7xl mx-auto px-6 mb-20">
+        <div className="bg-[#1A202C] rounded-[32px] p-10 md:p-16 text-white relative overflow-hidden">
+          <div className="relative z-10">
+            <h2 className="text-[32px] font-bold mb-8 text-center">Beyond Exams: The Games Lab</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="bg-white/5 p-8 rounded-[24px] border border-white/10">
+                <Gamepad2 className="text-emerald-400 mb-4" size={32} />
+                <h4 className="font-bold text-xl mb-3">Tech Hangman</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">Master programming vocabulary! Guess the hidden tech terms before you run out of lives. Perfect for learning new terminology.</p>
+              </div>
+              <div className="bg-white/5 p-8 rounded-[24px] border border-white/10">
+                <Keyboard className="text-emerald-400 mb-4" size={32} />
+                <h4 className="font-bold text-xl mb-3">Tech Wordle</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">The daily challenge! Decipher a 5-letter technical word in six tries. A new word every day to keep your brain sharp.</p>
+              </div>
+              <div className="bg-white/5 p-8 rounded-[24px] border border-white/10">
+                <Brain className="text-emerald-400 mb-4" size={32} />
+                <h4 className="font-bold text-xl mb-3">Logic Lab</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">Solve complex code snippets and logic puzzles. Test your ability to predict code output and understand algorithmic flow.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -140,6 +192,14 @@ export default function About() {
                 <CheckCircle2 size={18} />
                 <span className="font-medium">Screen Capture Blocking</span>
               </div>
+              <div className="flex items-center gap-3">
+                <CheckCircle2 size={18} />
+                <span className="font-medium">Right-Click Disabled</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <CheckCircle2 size={18} />
+                <span className="font-medium">Real-time Malpractice Logging</span>
+              </div>
             </div>
           </div>
           <div className="bg-white/20 p-6 rounded-[24px] backdrop-blur-sm">
@@ -158,9 +218,9 @@ export default function About() {
               <h3 className="text-xl font-bold">Frontend</h3>
             </div>
             <ul className="space-y-4 text-[#4A5568] font-medium">
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> HTML5 & CSS3</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> JavaScript (ES6+)</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Tailwind CSS</li>
+              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> React 18 & TypeScript</li>
+              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Tailwind CSS v4</li>
+              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Framer Motion</li>
             </ul>
           </div>
           <div>
@@ -169,20 +229,20 @@ export default function About() {
               <h3 className="text-xl font-bold">Backend</h3>
             </div>
             <ul className="space-y-4 text-[#4A5568] font-medium">
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Node.js</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Express.js</li>
+              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Node.js & Express</li>
+              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Firebase SDK</li>
               <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> RESTful APIs</li>
             </ul>
           </div>
           <div>
             <div className="flex items-center gap-3 mb-6 text-[#059669]">
-              <Lock size={24} />
-              <h3 className="text-xl font-bold">Security</h3>
+              <Database size={24} />
+              <h3 className="text-xl font-bold">Database</h3>
             </div>
             <ul className="space-y-4 text-[#4A5568] font-medium">
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Tab Switching Detection</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Browser Focus Monitoring</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Fullscreen Enforcement</li>
+              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Cloud Firestore</li>
+              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Firebase Auth</li>
+              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#059669]" /> Real-time Sync</li>
             </ul>
           </div>
         </div>
@@ -243,7 +303,7 @@ export default function About() {
       {/* Footer Info */}
       <footer className="py-12 border-t border-[#E2E8F0] text-center space-y-4">
         <p className="text-sm font-medium text-[#718096]">Xamplore - Strict Timing Exam Platform</p>
-        <p className="text-xs text-[#A0AEC0]">Version 4.0 • Developed for SRCAS</p>
+        <p className="text-xs text-[#A0AEC0]">Version 5.0 • Developed for SRCAS</p>
         <div className="flex items-center justify-center gap-8 pt-4">
           <div className="flex items-center gap-2 text-[#718096] text-xs font-medium">
             <Globe size={14} />
