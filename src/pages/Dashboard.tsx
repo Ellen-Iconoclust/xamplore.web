@@ -26,8 +26,9 @@ export default function Dashboard({ user }: DashboardProps) {
   const [specialLoginCountdown, setSpecialLoginCountdown] = useState<Record<string, {examId: string, pattern: string, seconds: number}>>({});
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const absSeconds = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(absSeconds / 60);
+    const secs = absSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
@@ -245,6 +246,18 @@ export default function Dashboard({ user }: DashboardProps) {
       }
 
       setStep('rules');
+      
+      // Request fullscreen on user gesture ('Continue' click)
+      try {
+        const docEl = document.documentElement;
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(err => {
+            console.warn('Fullscreen request rejected in Dashboard:', err);
+          });
+        }
+      } catch (e) {
+        console.error('Fullscreen request failed in Dashboard');
+      }
     } catch (e) {
       console.error('Error during continue:', e);
       setWarning('Server Error');
@@ -257,6 +270,20 @@ export default function Dashboard({ user }: DashboardProps) {
     if (!db || !selectedExamId) return;
     navigate(`/exam/${selectedExamId}?name=${encodeURIComponent(name)}`);
   };
+
+  // Automatic Start logic for synchronization
+  useEffect(() => {
+    if (step === 'rules' && selectedExamId) {
+      const exam = activeExams.find(e => e.id === selectedExamId);
+      if (exam) {
+        const timeLeft = loginCountdown[exam.id];
+        // If login window hits 0 or is already 0, auto start
+        if (timeLeft !== undefined && timeLeft <= 0) {
+          startExam();
+        }
+      }
+    }
+  }, [step, selectedExamId, loginCountdown]);
 
   return (
     <section id="test" className="py-16 bg-gray-50 min-h-screen">
@@ -571,9 +598,23 @@ export default function Dashboard({ user }: DashboardProps) {
             
             <button 
               onClick={startExam}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-lg font-bold shadow-lg transition duration-300 flex items-center justify-center gap-2"
+              disabled={step === 'rules' && selectedExamId && (loginCountdown[selectedExamId] || 0) > 0}
+              className={`w-full p-4 rounded-lg font-bold shadow-lg transition duration-300 flex items-center justify-center gap-2 ${
+                step === 'rules' && selectedExamId && (loginCountdown[selectedExamId] || 0) > 0
+                ? 'bg-gray-400 text-white cursor-wait' 
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              }`}
             >
-              <CheckCircle size={20} /> I Agree & Start Exam
+              {step === 'rules' && selectedExamId && (loginCountdown[selectedExamId] || 0) > 0 ? (
+                <>
+                  <Loader2 className="animate-spin" size={20} />
+                  Waiting for Exam to Start...
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={20} /> I Agree & Start Exam
+                </>
+              )}
             </button>
           </div>
         )}
