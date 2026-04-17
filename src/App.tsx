@@ -63,7 +63,7 @@ export default function App() {
             <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
             <Route path="/exam/:examId" element={user ? <Exam user={user} /> : <Navigate to="/login" />} />
             <Route path="/games" element={<Games />} />
-            <Route path="/resources" element={<Resources />} />
+            <Route path="/resources" element={<Resources user={user} />} />
             <Route path="/about" element={<About />} />
             <Route path="/admin" element={user?.role === 'admin' ? <Admin user={user} /> : <Navigate to="/dashboard" />} />
           </Routes>
