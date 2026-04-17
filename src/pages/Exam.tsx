@@ -23,6 +23,7 @@ export default function ExamPage({ user }: ExamPageProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [timeLeft, setTimeLeft] = useState(0);
+  const [serverEndTime, setServerEndTime] = useState<number | null>(null);
   const [tabSwitches, setTabSwitches] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<'idle' | 'started' | 'completed' | 'failed'>('idle');
@@ -77,20 +78,21 @@ export default function ExamPage({ user }: ExamPageProps) {
         setExam(examData);
         
         // Synchronized Timer Calculation
-        // Only apply synchronization if it's a regular start (no specialLoginExpiry)
-        if (examData.startTime && examData.loginWindow && (!currentSubmission || !currentSubmission.specialLoginExpiry)) {
+        if (examData.startTime && examData.loginWindow) {
           const startTimeDate = examData.startTime.toDate();
           const examStartMs = startTimeDate.getTime() + (examData.loginWindow * 60 * 1000);
           const examEndMs = examStartMs + (examData.duration * 60 * 1000);
-          const nowMs = new Date().getTime();
+          setServerEndTime(examEndMs);
           
-          const secondsLeft = Math.floor((examEndMs - nowMs) / 1000);
-          // Calculate the initial display time
-          // If we are slightly early (nowMs < examStartMs), show full duration
-          const syncedTimeLeft = Math.max(0, Math.min(secondsLeft, examData.duration * 60));
-          setTimeLeft(syncedTimeLeft);
+          const nowMs = Date.now();
+          const syncedTimeLeft = Math.max(0, Math.floor((examEndMs - nowMs) / 1000));
+          
+          // Limit to max duration just in case of weird startup overlaps
+          setTimeLeft(Math.min(syncedTimeLeft, examData.duration * 60));
         } else {
+          // Fallback if no global start time
           setTimeLeft(examData.duration * 60);
+          setServerEndTime(Date.now() + (examData.duration * 60 * 1000));
         }
 
         // 3. Handle submission state
@@ -214,25 +216,28 @@ export default function ExamPage({ user }: ExamPageProps) {
     };
   }, [status]);
 
-  // Timer logic
+  // Timer logic (Absolute Sync)
   useEffect(() => {
-    if (status === 'started' && timeLeft > 0) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!);
-            handleSubmit();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (status === 'started' && serverEndTime) {
+      const updateTimer = () => {
+        const now = Date.now();
+        const remaining = Math.max(0, Math.floor((serverEndTime - now) / 1000));
+        setTimeLeft(remaining);
+        
+        if (remaining <= 0) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          handleSubmit();
+        }
+      };
+
+      updateTimer(); // Initial call
+      timerRef.current = setInterval(updateTimer, 1000);
     }
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [status, timeLeft]);
+  }, [status, serverEndTime]);
 
   const triggerFail = async (reason: string) => {
     if (!examId || !exam) return;
