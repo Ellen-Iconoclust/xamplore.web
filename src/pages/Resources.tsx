@@ -36,10 +36,12 @@ export default function Resources({ user }: ResourcesProps) {
       const filtered = allMaterials.filter(mat => {
         // If public (no restricted emails)
         if (!mat.allowedEmails || mat.allowedEmails.length === 0) return true;
+        
+        // If user is admin (can see all materials)
+        if (user?.role === 'admin') return true;
+        
         // If user is logged in and their email is in the list
         if (user && mat.allowedEmails.includes(user.email)) return true;
-        // If user is admin (can see all their materials)
-        if (user && user.role === 'admin') return true;
         
         return false;
       });
@@ -199,14 +201,14 @@ export default function Resources({ user }: ResourcesProps) {
               <AnimatePresence>
                 {expandedSections.includes('your-materials') && (
                   <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="w-full"
                   >
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
                       {adminMaterials.map((mat) => (
-                        <div key={mat.id} className="bg-white p-8 rounded-[40px] shadow-lg border border-emerald-100 hover:border-emerald-500 hover:shadow-xl transition-all duration-300 group flex flex-col justify-between">
+                        <div key={mat.id} className="bg-white p-6 sm:p-8 rounded-3xl sm:rounded-[40px] shadow-lg border border-emerald-100 hover:border-emerald-500 hover:shadow-xl transition-all duration-300 group flex flex-col justify-between">
                           <div>
                             <div className="flex justify-between items-start mb-6">
                               <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-emerald-100">
@@ -218,16 +220,16 @@ export default function Resources({ user }: ResourcesProps) {
                                 </div>
                               )}
                             </div>
-                            <h4 className="font-bold text-xl text-secondary mb-3 group-hover:text-emerald-600 transition-colors tracking-tight">
+                            <h4 className="font-bold text-lg sm:text-xl text-secondary mb-3 group-hover:text-emerald-600 transition-colors tracking-tight">
                               {mat.topic}
                             </h4>
-                            <p className="text-sm text-secondary/60 mb-8 leading-relaxed line-clamp-3">
+                            <p className="text-xs sm:text-sm text-secondary/60 mb-6 sm:mb-8 leading-relaxed line-clamp-3">
                               {mat.details}
                             </p>
                           </div>
                           <button 
                             onClick={() => setSelectedMaterial(mat)}
-                            className="w-full bg-emerald-900 hover:bg-emerald-800 text-white py-4 px-6 rounded-2xl text-xs font-bold uppercase tracking-widest text-center transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10"
+                            className="w-full bg-emerald-900 hover:bg-emerald-800 text-white py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-bold uppercase tracking-widest text-center transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10"
                           >
                             <FileText size={16} /> Read Material
                           </button>
@@ -279,10 +281,10 @@ export default function Resources({ user }: ResourcesProps) {
                 <AnimatePresence>
                   {expandedSections.includes(langKey) && (
                     <motion.div 
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="w-full"
                     >
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                         {filteredCourses.map((course: any, idx: number) => (
@@ -472,7 +474,7 @@ export default function Resources({ user }: ResourcesProps) {
               initial={{ opacity: 0, scale: 0.9, y: 30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 30 }}
-              className="relative bg-white w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              className="relative bg-white w-full max-w-4xl rounded-3xl sm:rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
               <div className="px-8 sm:px-12 py-8 bg-emerald-50/50 border-b border-emerald-100 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-4">
