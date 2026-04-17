@@ -75,7 +75,23 @@ export default function ExamPage({ user }: ExamPageProps) {
         }
         const examData = { id: examSnap.id, ...examSnap.data() } as Exam;
         setExam(examData);
-        setTimeLeft(examData.duration * 60);
+        
+        // Synchronized Timer Calculation
+        // Only apply synchronization if it's a regular start (no specialLoginExpiry)
+        if (examData.startTime && examData.loginWindow && (!currentSubmission || !currentSubmission.specialLoginExpiry)) {
+          const startTimeDate = examData.startTime.toDate();
+          const examStartMs = startTimeDate.getTime() + (examData.loginWindow * 60 * 1000);
+          const examEndMs = examStartMs + (examData.duration * 60 * 1000);
+          const nowMs = new Date().getTime();
+          
+          const secondsLeft = Math.floor((examEndMs - nowMs) / 1000);
+          // Calculate the initial display time
+          // If we are slightly early (nowMs < examStartMs), show full duration
+          const syncedTimeLeft = Math.max(0, Math.min(secondsLeft, examData.duration * 60));
+          setTimeLeft(syncedTimeLeft);
+        } else {
+          setTimeLeft(examData.duration * 60);
+        }
 
         // 3. Handle submission state
         if (currentSubmission) {
@@ -285,8 +301,9 @@ export default function ExamPage({ user }: ExamPageProps) {
   };
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const absSeconds = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(absSeconds / 60);
+    const secs = absSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
