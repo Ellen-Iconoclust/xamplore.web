@@ -44,6 +44,18 @@ service cloud.firestore {
     //   - url: string (required)
     //   - category: string (optional)
     //
+    // Collection: admin_materials
+    // Document ID: materialId
+    // Fields:
+    //   - topic: string (required)
+    //   - chapter: string (required)
+    //   - details: string (optional)
+    //   - content: string (required)
+    //   - videoUrl: string (optional)
+    //   - allowedEmails: list (required)
+    //   - createdBy: string (required)
+    //   - createdAt: timestamp (required)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -78,6 +90,16 @@ service cloud.firestore {
              data.tabSwitches is number;
     }
 
+    function isValidAdminMaterial(data) {
+      return data.keys().hasAll(['topic', 'chapter', 'content', 'allowedEmails']) &&
+             data.topic is string && data.topic.size() > 0 && data.topic.size() < 200 &&
+             data.chapter is string && data.chapter.size() > 0 && data.chapter.size() < 200 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 50000 &&
+             (!('details' in data) || (data.details is string && data.details.size() < 500)) &&
+             (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() < 500)) &&
+             data.allowedEmails is list;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -107,6 +129,17 @@ service cloud.firestore {
     match /resources/{resourceId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    match /admin_materials/{materialId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.allowedEmails.size() == 0 || 
+        request.auth.token.email in resource.data.allowedEmails
+      );
+      allow create: if isAdmin() && isValidAdminMaterial(request.resource.data);
+      allow update: if isAdmin() && isValidAdminMaterial(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     match /settings/{settingId} {
