@@ -56,3 +56,15 @@ export interface Resource {
   category?: string;
   thumbnail?: string;
 }
+
+export interface AdminMaterial {
+  id: string;
+  topic: string;
+  chapter: string;
+  details: string;
+  content: string;
+  videoUrl?: string;
+  allowedEmails: string[]; // If empty, visible to everyone
+  createdBy: string;
+  createdAt: Timestamp;
+}
