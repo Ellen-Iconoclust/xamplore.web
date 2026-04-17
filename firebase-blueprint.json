@@ -76,12 +76,29 @@
         "thumbnail": { "type": "string" }
       },
       "required": ["title", "url"]
+    },
+    "AdminMaterial": {
+      "title": "AdminMaterial",
+      "description": "Educational material uploaded by admins.",
+      "type": "object",
+      "properties": {
+        "topic": { "type": "string" },
+        "chapter": { "type": "string" },
+        "details": { "type": "string" },
+        "content": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "allowedEmails": { "type": "array", "items": { "type": "string" } },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["topic", "chapter", "content"]
     }
   },
   "firestore": {
     "/users/{userId}": { "schema": "User", "description": "User profiles." },
     "/exams/{examId}": { "schema": "Exam", "description": "Exams collection." },
     "/submissions/{submissionId}": { "schema": "Submission", "description": "Exam submissions." },
-    "/resources/{resourceId}": { "schema": "Resource", "description": "Learning resources." }
+    "/resources/{resourceId}": { "schema": "Resource", "description": "Learning resources." },
+    "/admin_materials/{materialId}": { "schema": "AdminMaterial", "description": "Admin uploaded study materials." }
   }
 }
