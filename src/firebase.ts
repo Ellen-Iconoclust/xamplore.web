@@ -1,37 +1,13 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, onSnapshot, addDoc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import firebaseConfig from '../firebase-applet-config.json';
 
-// Use environment variables for production, fallback to local config if available
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-};
-
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || '(default)';
-
-// Initialize Firebase only if config is present, otherwise export placeholders
-let app;
-let auth: any;
-let db: any;
-let googleProvider: any;
-
-if (firebaseConfig.apiKey) {
-  try {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app, databaseId);
-    googleProvider = new GoogleAuthProvider();
-  } catch (error) {
-    console.error('Firebase initialization failed:', error);
-  }
-} else {
-  console.error('Firebase API Key is missing. Please check your environment variables in Vercel.');
-}
+// Initialize Firebase using the provisioned config
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const googleProvider = new GoogleAuthProvider();
 
 export { auth, db, googleProvider };
 
