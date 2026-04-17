@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
-import { User, Exam, Question, Resource } from '../types';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { User, Exam, Question, Resource, AdminMaterial } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit3, Settings, Users, BookOpen, ShieldCheck, Loader2, Save, X, RotateCcw, Lightbulb, Star } from 'lucide-react';
+import { Plus, Trash2, Edit3, Settings, Users, BookOpen, ShieldCheck, Loader2, Save, X, RotateCcw, Lightbulb, Star, Youtube, FileText } from 'lucide-react';
 import { getDailyWordObj } from '../utils/wordle';
 
 interface AdminProps {
@@ -12,7 +12,7 @@ interface AdminProps {
 
 export default function Admin({ user }: AdminProps) {
   const [exams, setExams] = useState<Exam[]>([]);
-  const [resources, setResources] = useState<Resource[]>([]);
+  const [adminMaterials, setAdminMaterials] = useState<AdminMaterial[]>([]);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'exams' | 'resources' | 'submissions'>('exams');
@@ -41,31 +41,44 @@ export default function Admin({ user }: AdminProps) {
     points: 1
   });
 
+  // Resource/Admin Material State
+  const [showResourceModal, setShowResourceModal] = useState(false);
+  const [newMaterial, setNewMaterial] = useState<Partial<AdminMaterial>>({
+    topic: '',
+    chapter: '',
+    details: '',
+    content: '',
+    videoUrl: '',
+    allowedEmails: []
+  });
+  const [resEmailInput, setResEmailInput] = useState('');
+  const [editingMaterial, setEditingMaterial] = useState<AdminMaterial | null>(null);
+
   useEffect(() => {
     if (!db) return;
     const unsubscribeExams = onSnapshot(query(collection(db, 'exams'), orderBy('status', 'desc')), (snapshot) => {
       setExams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam)));
     }, (error) => {
-      console.error('Error listening to exams:', error);
+      handleFirestoreError(error, OperationType.LIST, 'exams');
     });
 
-    const unsubscribeResources = onSnapshot(collection(db, 'resources'), (snapshot) => {
-      setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Resource)));
+    const unsubscribeMaterials = onSnapshot(query(collection(db, 'admin_materials'), orderBy('createdAt', 'desc')), (snapshot) => {
+      setAdminMaterials(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdminMaterial)));
     }, (error) => {
-      console.error('Error listening to resources:', error);
+      handleFirestoreError(error, OperationType.LIST, 'admin_materials');
     });
 
     const unsubscribeSubmissions = onSnapshot(query(collection(db, 'submissions'), orderBy('submittedAt', 'desc')), (snapshot) => {
       setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     }, (error) => {
-      console.error('Error listening to submissions:', error);
+      handleFirestoreError(error, OperationType.LIST, 'submissions');
       setLoading(false);
     });
 
     return () => {
       unsubscribeExams();
-      unsubscribeResources();
+      unsubscribeMaterials();
       unsubscribeSubmissions();
     };
   }, []);
@@ -97,7 +110,7 @@ export default function Admin({ user }: AdminProps) {
       setEditingExam(null);
       setNewExam({ title: '', description: '', duration: 30, loginWindow: 5, status: 'draft', pattern: '', password: '', allowedEmails: [], questions: [] });
     } catch (error) {
-      console.error('Error saving exam:', error);
+      handleFirestoreError(error, editingExam ? OperationType.UPDATE : OperationType.CREATE, 'exams');
     }
   };
 
@@ -157,7 +170,7 @@ export default function Admin({ user }: AdminProps) {
       await deleteDoc(doc(db, 'exams', id));
       setConfirmingExamDeleteId(null);
     } catch (error) {
-      console.error('Error deleting exam:', error);
+      handleFirestoreError(error, OperationType.DELETE, `exams/${id}`);
     }
   };
 
@@ -184,6 +197,64 @@ export default function Admin({ user }: AdminProps) {
       console.error('Error resetting submission:', error);
       alert('Error resetting submission: ' + error.message);
     }
+  };
+
+  const handleSaveMaterial = async () => {
+    if (!newMaterial.topic || !newMaterial.chapter || !newMaterial.content) {
+      alert('Please fill all required fields (Topic, Chapter, Content)');
+      return;
+    }
+
+    try {
+      if (editingMaterial) {
+        await updateDoc(doc(db, 'admin_materials', editingMaterial.id), {
+          ...newMaterial
+        });
+      } else {
+        await addDoc(collection(db, 'admin_materials'), {
+          ...newMaterial,
+          createdBy: user.uid,
+          createdAt: serverTimestamp()
+        });
+      }
+      setShowResourceModal(false);
+      setEditingMaterial(null);
+      setNewMaterial({ topic: '', chapter: '', details: '', content: '', videoUrl: '', allowedEmails: [] });
+    } catch (error) {
+      handleFirestoreError(error, editingMaterial ? OperationType.UPDATE : OperationType.CREATE, 'admin_materials');
+    }
+  };
+
+  const handleDeleteMaterial = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this resource?')) return;
+    try {
+      await deleteDoc(doc(db, 'admin_materials', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `admin_materials/${id}`);
+    }
+  };
+
+  const handleEditMaterial = (material: AdminMaterial) => {
+    setEditingMaterial(material);
+    setNewMaterial(material);
+    setShowResourceModal(true);
+  };
+
+  const addResAllowedEmail = () => {
+    if (resEmailInput && !newMaterial.allowedEmails?.includes(resEmailInput)) {
+      setNewMaterial({
+        ...newMaterial,
+        allowedEmails: [...(newMaterial.allowedEmails || []), resEmailInput]
+      });
+      setResEmailInput('');
+    }
+  };
+
+  const removeResAllowedEmail = (email: string) => {
+    setNewMaterial({
+      ...newMaterial,
+      allowedEmails: newMaterial.allowedEmails?.filter(e => e !== email)
+    });
   };
 
   if (loading) {
@@ -318,7 +389,10 @@ export default function Admin({ user }: AdminProps) {
               <BookOpen className="text-primary" />
               Resource Management
             </h2>
-            <button className="flex items-center gap-2 bg-emerald-900 text-white px-8 py-4 rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-emerald-800 transition-all shadow-lg shadow-emerald-900/20">
+            <button 
+              onClick={() => { setEditingMaterial(null); setNewMaterial({ topic: '', chapter: '', details: '', content: '', videoUrl: '', allowedEmails: [] }); setShowResourceModal(true); }}
+              className="flex items-center gap-2 bg-emerald-900 text-white px-8 py-4 rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-emerald-800 transition-all shadow-lg shadow-emerald-900/20"
+            >
               <Plus size={20} /> Add Resource
             </button>
           </div>
@@ -327,29 +401,46 @@ export default function Admin({ user }: AdminProps) {
             <table className="w-full text-left">
               <thead className="bg-emerald-50/50 text-[10px] font-bold uppercase tracking-widest text-secondary/40">
                 <tr>
-                  <th className="px-8 py-6">Title</th>
-                  <th className="px-8 py-6">Category</th>
-                  <th className="px-8 py-6">URL</th>
+                  <th className="px-8 py-6">Topic / Chapter</th>
+                  <th className="px-8 py-6">Details</th>
+                  <th className="px-8 py-6">Visibility</th>
                   <th className="px-8 py-6 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-emerald-50">
-                {resources.map((res) => (
+                {adminMaterials.map((res) => (
                   <tr key={res.id} className="hover:bg-emerald-50/30 transition-colors">
-                    <td className="px-8 py-6 font-bold text-secondary text-sm">{res.title}</td>
                     <td className="px-8 py-6">
-                      <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-widest rounded-full border border-emerald-100">
-                        {res.category || 'General'}
+                      <p className="font-bold text-secondary text-sm">{res.topic}</p>
+                      <p className="text-[10px] text-secondary/40 font-bold uppercase tracking-widest">{res.chapter}</p>
+                    </td>
+                    <td className="px-8 py-6">
+                      <p className="text-xs text-secondary/60 line-clamp-1">{res.details}</p>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full border ${
+                        res.allowedEmails.length === 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'
+                      }`}>
+                        {res.allowedEmails.length === 0 ? 'Public' : `${res.allowedEmails.length} Students`}
                       </span>
                     </td>
-                    <td className="px-8 py-6 text-xs text-primary truncate max-w-[200px]">{res.url}</td>
                     <td className="px-8 py-6 text-right">
-                      <button className="p-2 text-secondary/40 hover:text-red-500 transition-colors">
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => handleEditMaterial(res)} className="p-2 text-secondary/40 hover:text-primary transition-colors">
+                          <Edit3 size={16} />
+                        </button>
+                        <button onClick={() => handleDeleteMaterial(res.id)} className="p-2 text-secondary/40 hover:text-red-500 transition-colors">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
+                {adminMaterials.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-8 py-12 text-center text-secondary/40 italic">No resources uploaded yet.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -643,6 +734,131 @@ export default function Admin({ user }: AdminProps) {
               <div className="p-10 border-t border-emerald-50 bg-emerald-50/30">
                 <button onClick={handleCreateExam} className="w-full py-5 bg-emerald-900 text-white rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-emerald-800 transition-all shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2">
                   <Save size={20} /> Save Exam
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Resource Modal */}
+      <AnimatePresence>
+        {showResourceModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center px-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setShowResourceModal(false); setEditingMaterial(null); }}
+              className="absolute inset-0 bg-emerald-900/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden"
+            >
+              <div className="px-10 py-8 border-b border-emerald-50 bg-emerald-50/30 flex justify-between items-center">
+                <h2 className="font-display text-2xl uppercase tracking-tight text-secondary">{editingMaterial ? 'Edit Resource' : 'Add New Resource'}</h2>
+                <button onClick={() => { setShowResourceModal(false); setEditingMaterial(null); }} className="p-2 hover:bg-emerald-50 rounded-full text-secondary/40">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-10 space-y-8 max-h-[70vh] overflow-y-auto no-scrollbar">
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Topic</label>
+                    <input 
+                      type="text" 
+                      value={newMaterial.topic}
+                      onChange={(e) => setNewMaterial({...newMaterial, topic: e.target.value})}
+                      className="w-full px-6 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl focus:outline-none" 
+                      placeholder="e.g. Data Structures"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Chapter</label>
+                    <input 
+                      type="text" 
+                      value={newMaterial.chapter}
+                      onChange={(e) => setNewMaterial({...newMaterial, chapter: e.target.value})}
+                      className="w-full px-6 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl focus:outline-none" 
+                      placeholder="e.g. Chapter 1: Introduction"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Short Details</label>
+                  <input 
+                    type="text" 
+                    value={newMaterial.details}
+                    onChange={(e) => setNewMaterial({...newMaterial, details: e.target.value})}
+                    className="w-full px-6 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl focus:outline-none" 
+                    placeholder="Brief description of the material..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Concept Content (Markdown/Text)</label>
+                  <textarea 
+                    value={newMaterial.content}
+                    onChange={(e) => setNewMaterial({...newMaterial, content: e.target.value})}
+                    className="w-full px-6 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl focus:outline-none min-h-[200px] resize-none" 
+                    placeholder="Write the detailed concept text here..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Video Link (Optional)</label>
+                  <div className="relative">
+                    <Youtube className="absolute left-4 top-4 text-secondary/40" size={20} />
+                    <input 
+                      type="url" 
+                      value={newMaterial.videoUrl}
+                      onChange={(e) => setNewMaterial({...newMaterial, videoUrl: e.target.value})}
+                      className="w-full pl-12 pr-6 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl focus:outline-none" 
+                      placeholder="https://youtube.com/..."
+                    />
+                  </div>
+                </div>
+
+                {/* Allowed Emails Section */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-secondary/40">Restrict to Students (Optional)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="email" 
+                      value={resEmailInput}
+                      onChange={(e) => setResEmailInput(e.target.value)}
+                      className="flex-1 px-6 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl focus:outline-none" 
+                      placeholder="student@example.com"
+                    />
+                    <button 
+                      onClick={addResAllowedEmail}
+                      className="bg-emerald-900 text-white px-6 rounded-2xl font-bold uppercase tracking-widest text-[10px]"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {newMaterial.allowedEmails?.map(email => (
+                      <span key={email} className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs flex items-center gap-2">
+                        {email}
+                        <button onClick={() => removeResAllowedEmail(email)} className="hover:text-red-500"><X size={12} /></button>
+                      </span>
+                    ))}
+                    {(!newMaterial.allowedEmails || newMaterial.allowedEmails.length === 0) && (
+                      <p className="text-xs text-secondary/40 italic">Visible to all students if no emails are added.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-10 border-t border-emerald-50 bg-emerald-50/30">
+                <button onClick={handleSaveMaterial} className="w-full py-5 bg-emerald-900 text-white rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-emerald-800 transition-all shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2">
+                  <Save size={20} /> Save Resource Material
                 </button>
               </div>
             </motion.div>
