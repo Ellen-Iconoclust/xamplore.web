@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Star, PlayCircle, ExternalLink, Code, ChevronDown, ChevronUp, Share2, User, BookOpen, Send, XCircle, Loader2, Sparkles, GraduationCap } from 'lucide-react';
+import { Search, Star, PlayCircle, ExternalLink, Code, ChevronDown, ChevronUp, Share2, User, BookOpen, Send, XCircle, Loader2, Sparkles, GraduationCap, FileText, Youtube, Info, Clock, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { coursesData } from '../data/coursesData';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { AdminMaterial, User as AppUser } from '../types';
 
-export default function Resources() {
+interface ResourcesProps {
+  user: AppUser | null;
+}
+
+export default function Resources({ user }: ResourcesProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('');
-  const [expandedSections, setExpandedSections] = useState<string[]>([]);
+  const [expandedSections, setExpandedSections] = useState<string[]>(['your-materials']);
+  const [adminMaterials, setAdminMaterials] = useState<AdminMaterial[]>([]);
+  const [selectedMaterial, setSelectedMaterial] = useState<AdminMaterial | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     class: '',
@@ -16,6 +25,32 @@ export default function Resources() {
     url: ''
   });
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+
+  useEffect(() => {
+    if (!db) return;
+    const q = query(collection(db, 'admin_materials'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allMaterials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdminMaterial));
+      
+      // Filter materials
+      const filtered = allMaterials.filter(mat => {
+        // If public (no restricted emails)
+        if (!mat.allowedEmails || mat.allowedEmails.length === 0) return true;
+        // If user is logged in and their email is in the list
+        if (user && mat.allowedEmails.includes(user.email)) return true;
+        // If user is admin (can see all their materials)
+        if (user && user.role === 'admin') return true;
+        
+        return false;
+      });
+      
+      setAdminMaterials(filtered);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'admin_materials');
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -78,7 +113,11 @@ export default function Resources() {
     'java': 'Java Programming',
     'javascript': 'JavaScript',
     'web': 'Web Development (HTML/CSS/Tailwind)',
-    'frameworks': 'Frameworks & Libraries'
+    'frameworks': 'Frameworks & Libraries',
+    'dsa': 'Data Structures & Algorithms',
+    'database': 'Database Management (SQL/NoSQL)',
+    'cloud': 'Cloud Computing (AWS/Azure/GCP)',
+    'cybersecurity': 'Cybersecurity & Ethical Hacking'
   };
 
   return (
@@ -91,7 +130,7 @@ export default function Resources() {
           </h2>
           <p className="text-xl text-gray-600 mb-6">Curated tutorials & learning resources for SRCAS students</p>
           <div className="flex flex-wrap justify-center gap-3 mb-8">
-            {['C/C++', 'Python', 'Java', 'JavaScript', 'HTML/CSS', 'Frameworks'].map(tag => (
+            {['C/C++', 'Python', 'Java', 'JavaScript', 'HTML/CSS', 'Frameworks', 'DSA', 'Databases', 'Cloud', 'Cybersecurity'].map(tag => (
               <span key={tag} className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">{tag}</span>
             ))}
           </div>
@@ -116,7 +155,7 @@ export default function Resources() {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               >
-                <option value="">All Languages</option>
+                <option value="">All Categories</option>
                 <option value="c">C Programming</option>
                 <option value="cpp">C++</option>
                 <option value="python">Python</option>
@@ -124,6 +163,10 @@ export default function Resources() {
                 <option value="javascript">JavaScript</option>
                 <option value="web">HTML/CSS/Tailwind</option>
                 <option value="frameworks">Frameworks</option>
+                <option value="dsa">DSA</option>
+                <option value="database">Databases</option>
+                <option value="cloud">Cloud Computing</option>
+                <option value="cybersecurity">Cybersecurity</option>
               </select>
             </div>
           </div>
@@ -131,6 +174,72 @@ export default function Resources() {
 
         {/* Language Sections */}
         <div className="space-y-12">
+          {/* Admin Materials Section */}
+          {adminMaterials.length > 0 && (
+            <div className="mb-14">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-100 p-2 rounded-lg">
+                    <BookOpen className="text-emerald-600 w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-800 tracking-tight">Your Materials</h3>
+                    <p className="text-xs text-secondary/60 font-medium">Specially shared resources & materials</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => toggleSection('your-materials')}
+                  className="text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-1 self-start sm:self-center"
+                >
+                  {expandedSections.includes('your-materials') ? <ChevronUp /> : <ChevronDown />}
+                  <span>{expandedSections.includes('your-materials') ? 'Collapse' : 'Expand'}</span>
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {expandedSections.includes('your-materials') && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
+                      {adminMaterials.map((mat) => (
+                        <div key={mat.id} className="bg-white p-8 rounded-[40px] shadow-lg border border-emerald-100 hover:border-emerald-500 hover:shadow-xl transition-all duration-300 group flex flex-col justify-between">
+                          <div>
+                            <div className="flex justify-between items-start mb-6">
+                              <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-emerald-100">
+                                {mat.chapter}
+                              </span>
+                              {mat.videoUrl && (
+                                <div className="text-red-500" title="Includes Video">
+                                  <Youtube size={18} />
+                                </div>
+                              )}
+                            </div>
+                            <h4 className="font-bold text-xl text-secondary mb-3 group-hover:text-emerald-600 transition-colors tracking-tight">
+                              {mat.topic}
+                            </h4>
+                            <p className="text-sm text-secondary/60 mb-8 leading-relaxed line-clamp-3">
+                              {mat.details}
+                            </p>
+                          </div>
+                          <button 
+                            onClick={() => setSelectedMaterial(mat)}
+                            className="w-full bg-emerald-900 hover:bg-emerald-800 text-white py-4 px-6 rounded-2xl text-xs font-bold uppercase tracking-widest text-center transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10"
+                          >
+                            <FileText size={16} /> Read Material
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
           {Object.keys(coursesData).map(langKey => {
             if (filter && filter !== langKey) return null;
             const courses = coursesData[langKey];
@@ -347,6 +456,97 @@ export default function Resources() {
           </div>
         </div>
       </div>
+
+      {/* Material Detail Modal */}
+      <AnimatePresence>
+        {selectedMaterial && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center px-4 sm:px-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedMaterial(null)}
+              className="absolute inset-0 bg-emerald-900/40 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              className="relative bg-white w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="px-8 sm:px-12 py-8 bg-emerald-50/50 border-b border-emerald-100 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-600">
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold text-secondary tracking-tight">{selectedMaterial.topic}</h2>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">{selectedMaterial.chapter}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedMaterial(null)}
+                  className="p-3 hover:bg-emerald-100 rounded-full text-secondary transition-colors"
+                >
+                  <XCircle size={24} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 sm:p-12 space-y-10 custom-scrollbar">
+                {/* Details Section */}
+                <div className="bg-emerald-50 rounded-3xl p-6 border border-emerald-100 flex items-start gap-4">
+                  <Info className="text-emerald-600 mt-1 shrink-0" size={20} />
+                  <div>
+                    <h3 className="font-bold text-sm text-emerald-800 uppercase tracking-widest mb-1">Concept Overview</h3>
+                    <p className="text-emerald-700/80 leading-relaxed italic">{selectedMaterial.details}</p>
+                  </div>
+                </div>
+
+                {/* Content Section */}
+                <div className="prose prose-emerald max-w-none">
+                  <h3 className="font-display text-2xl uppercase tracking-tight text-secondary mb-6 border-l-4 border-emerald-500 pl-4 bg-emerald-50/30 py-2">Detailed Content</h3>
+                  <div className="text-secondary/80 leading-loose whitespace-pre-wrap text-lg bg-emerald-50/10 p-4 rounded-2xl">
+                    {selectedMaterial.content}
+                  </div>
+                </div>
+
+                {/* Video Section */}
+                {selectedMaterial.videoUrl && (
+                  <div className="pt-8 border-t border-emerald-100">
+                    <h3 className="font-bold text-sm text-secondary uppercase tracking-widest mb-6 flex items-center gap-2">
+                      <Youtube className="text-red-500" size={20} /> Video Supplement
+                    </h3>
+                    <div className="aspect-video bg-secondary/5 rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-secondary/10 group hover:border-emerald-200 transition-colors p-8">
+                      <p className="text-secondary/40 text-sm mb-6 font-medium text-center">This topic includes a video tutorial for better understanding.</p>
+                      <a 
+                        href={selectedMaterial.videoUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl font-bold uppercase tracking-widest text-xs transition-transform hover:scale-105 shadow-xl shadow-red-600/20"
+                      >
+                        <Play size={18} fill="currentColor" /> Watch on YouTube
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-12 py-6 bg-emerald-50/30 border-t border-emerald-100 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2 text-secondary/40">
+                  <Clock size={14} />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Added by Faculty</span>
+                </div>
+                <button 
+                  onClick={() => setSelectedMaterial(null)}
+                  className="bg-secondary text-white px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-secondary/90 transition-all shadow-lg shadow-secondary/10"
+                >
+                  Mark as Read
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
