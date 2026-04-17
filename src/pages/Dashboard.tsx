@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, getDoc, updateDoc, addDoc } from 'firebase/firestore';
 import { User, Exam } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Clock, CheckCircle, MonitorOff, Minimize, Copy, AlertTriangle, Lock, Loader2, RotateCcw } from 'lucide-react';
+import { AlertCircle, Clock, CheckCircle, MonitorOff, Minimize, Copy, AlertTriangle, Lock, Loader2, RotateCcw, XCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface DashboardProps {
@@ -18,6 +18,8 @@ export default function Dashboard({ user }: DashboardProps) {
   const [password, setPassword] = useState('');
   const [warning, setWarning] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
   const [completedExamIds, setCompletedExamIds] = useState<string[]>([]);
   const [failedExamIds, setFailedExamIds] = useState<string[]>([]);
   const [examWindow, setExamWindow] = useState<any>(null);
@@ -39,10 +41,10 @@ export default function Dashboard({ user }: DashboardProps) {
       const newCountdowns: Record<string, number> = {};
       activeExams.forEach(exam => {
         if (exam.startTime && exam.loginWindow) {
-          const startTime = (exam.startTime as any).toDate();
-          const now = new Date();
-          const expiryTime = startTime.getTime() + exam.loginWindow * 60 * 1000;
-          const diffSeconds = Math.floor((expiryTime - now.getTime()) / 1000);
+          const startTimeMs = (exam.startTime as any).toDate().getTime();
+          const expiryTimeMs = startTimeMs + exam.loginWindow * 60 * 1000;
+          const nowMs = Date.now();
+          const diffSeconds = Math.floor((expiryTimeMs - nowMs) / 1000);
           newCountdowns[exam.id] = Math.max(0, diffSeconds);
         }
       });
@@ -271,6 +273,81 @@ export default function Dashboard({ user }: DashboardProps) {
     navigate(`/exam/${selectedExamId}?name=${encodeURIComponent(name)}`);
   };
 
+  const triggerMalpractice = async (reason: string) => {
+    if (!selectedExamId || !db || isBlocked) return;
+    setIsBlocked(true);
+    setBlockReason(reason);
+    
+    try {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch (e) {}
+
+    try {
+      // Find or create a submission to block
+      const q = query(
+        collection(db, 'submissions'),
+        where('userId', '==', user.uid),
+        where('examId', '==', selectedExamId)
+      );
+      const snapshot = await getDocs(q);
+      
+      const payload = {
+        examId: selectedExamId,
+        userId: user.uid,
+        userName: name || user.displayName || 'Anonymous',
+        status: 'failed' as const,
+        reason: `Malpractice on Rules Page: ${reason}`,
+        tabSwitches: 1,
+        submittedAt: new Date(),
+        pattern: activeExams.find(e => e.id === selectedExamId)?.pattern || 'Unknown'
+      };
+
+      if (!snapshot.empty) {
+        // Update existing in-progress or retake session
+        await updateDoc(doc(db, 'submissions', snapshot.docs[0].id), payload);
+      } else {
+        // Create new failed record
+        await addDoc(collection(db, 'submissions'), payload);
+      }
+    } catch (error) {
+      console.error('Error reporting malpractice on Rules page:', error);
+    }
+  };
+
+  // Malpractice Detection on Rules Page
+  useEffect(() => {
+    if (step !== 'rules' || isBlocked) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        triggerMalpractice('Tab switched while reading rules');
+      }
+    };
+
+    const handleBlur = () => {
+      triggerMalpractice('Window focus lost while reading rules');
+    };
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        triggerMalpractice('Exited fullscreen while reading rules');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [step, selectedExamId, isBlocked]);
+
   // Automatic Start logic for synchronization
   useEffect(() => {
     if (step === 'rules' && selectedExamId) {
@@ -289,24 +366,55 @@ export default function Dashboard({ user }: DashboardProps) {
     <section id="test" className="py-16 bg-gray-50 min-h-screen">
       <div className="max-w-xl mx-auto bg-white p-8 rounded-xl shadow-xl border border-gray-100">
         
-        {/* Exam Window Status (Simplified) */}
-        {examWindow && examWindow.active && (
-          <div className={`mb-6 p-4 border rounded-lg text-center ${examWindow.paused ? 'bg-yellow-50 border-yellow-200' : 'bg-emerald-50 border-emerald-200'}`}>
-             <div className="flex items-center justify-center gap-2 text-emerald-700">
-                <Clock size={18} />
-                <span className="font-medium">Exam Window {examWindow.paused ? 'Paused' : 'Open'}</span>
-             </div>
-          </div>
+        {/* Blocked UI */}
+        {isBlocked && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center py-8"
+          >
+            <XCircle size={64} className="mx-auto text-red-500 mb-6" />
+            <h2 className="text-3xl font-bold text-red-600 brand mb-4">Access Blocked</h2>
+            <p className="text-gray-600 mb-8">{blockReason}</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 text-left">
+              <p className="text-xs text-red-600 font-medium">
+                Violating exam rules (exiting fullscreen or switching tabs) has locked your access. 
+                Please contact the administrator to reset your status.
+              </p>
+            </div>
+            <button 
+              onClick={() => {
+                setIsBlocked(false);
+                setStep('login');
+                window.location.reload(); // Refresh to clear state
+              }} 
+              className="w-full bg-gray-600 hover:bg-gray-700 text-white p-3 rounded-lg font-semibold shadow-md transition"
+            >
+              Return to Login
+            </button>
+          </motion.div>
         )}
 
-        {loading && (
-          <div className="text-center py-10">
-            <Loader2 className="animate-spin text-emerald-600 mx-auto" size={40} />
-            <p className="mt-3 text-emerald-600 font-semibold">Connecting to Server...</p>
-          </div>
-        )}
+        {!isBlocked && (
+          <>
+            {/* Exam Window Status (Simplified) */}
+            {examWindow && examWindow.active && (
+              <div className={`mb-6 p-4 border rounded-lg text-center ${examWindow.paused ? 'bg-yellow-50 border-yellow-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                <div className="flex items-center justify-center gap-2 text-emerald-700">
+                  <Clock size={18} />
+                  <span className="font-medium">Exam Window {examWindow.paused ? 'Paused' : 'Open'}</span>
+                </div>
+              </div>
+            )}
 
-        {!loading && step === 'login' && (
+            {loading && (
+              <div className="text-center py-10">
+                <Loader2 className="animate-spin text-emerald-600 mx-auto" size={40} />
+                <p className="mt-3 text-emerald-600 font-semibold">Connecting to Server...</p>
+              </div>
+            )}
+
+            {!loading && step === 'login' && (
           <div id="login">
             <h2 className="text-2xl font-bold mb-6 text-emerald-600 brand">Exam Login</h2>
             
@@ -618,7 +726,9 @@ export default function Dashboard({ user }: DashboardProps) {
             </button>
           </div>
         )}
-      </div>
-    </section>
-  );
+      </>
+    )}
+  </div>
+</section>
+);
 }
