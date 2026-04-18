@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Star, PlayCircle, ExternalLink, Code, ChevronDown, ChevronUp, Share2, User, BookOpen, Send, XCircle, Loader2, Sparkles, GraduationCap, FileText, Youtube, Info, Clock, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { coursesData } from '../data/coursesData';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { AdminMaterial, User as AppUser } from '../types';
 
@@ -15,6 +15,7 @@ export default function Resources({ user }: ResourcesProps) {
   const [filter, setFilter] = useState('');
   const [expandedSections, setExpandedSections] = useState<string[]>(['your-materials']);
   const [adminMaterials, setAdminMaterials] = useState<AdminMaterial[]>([]);
+  const [loadingMaterials, setLoadingMaterials] = useState(true);
   const [selectedMaterial, setSelectedMaterial] = useState<AdminMaterial | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -28,31 +29,82 @@ export default function Resources({ user }: ResourcesProps) {
 
   useEffect(() => {
     if (!db) return;
-    const q = query(collection(db, 'admin_materials'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allMaterials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdminMaterial));
-      
-      // Filter materials
-      const filtered = allMaterials.filter(mat => {
-        // If public (no restricted emails)
-        if (!mat.allowedEmails || mat.allowedEmails.length === 0) return true;
-        
-        // If user is admin (can see all materials)
-        if (user?.role === 'admin') return true;
-        
-        // If user is logged in and their email is in the list
-        if (user && mat.allowedEmails.includes(user.email)) return true;
-        
-        return false;
+    setLoadingMaterials(true);
+    
+    const materialSnapshots: Record<string, AdminMaterial> = {};
+    const unsubs: (() => void)[] = [];
+
+    const handleSnapshot = (snapshot: any) => {
+      snapshot.docs.forEach((doc: any) => {
+        materialSnapshots[doc.id] = { id: doc.id, ...doc.data() } as AdminMaterial;
       });
       
-      setAdminMaterials(filtered);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'admin_materials');
-    });
+      const allMerged = Object.values(materialSnapshots).sort((a, b) => {
+        const timeA = (a.createdAt as any)?.toMillis?.() || 0;
+        const timeB = (b.createdAt as any)?.toMillis?.() || 0;
+        return timeB - timeA;
+      });
 
-    return () => unsubscribe();
+      setAdminMaterials(allMerged);
+      setLoadingMaterials(false);
+    };
+
+    if (user?.role === 'admin') {
+      // Admins see everything via blanket read
+      const qAdmin = query(collection(db, 'admin_materials'), orderBy('createdAt', 'desc'));
+      unsubs.push(onSnapshot(qAdmin, (snapshot) => {
+        setAdminMaterials(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdminMaterial)));
+        setLoadingMaterials(false);
+      }, (err) => {
+        console.error('Error fetching admin materials (admin):', err);
+        setLoadingMaterials(false);
+      }));
+    } else {
+      // Targeted queries for strict server-side rules
+      const qPublic = query(collection(db, 'admin_materials'), where('allowedEmails', '==', []));
+      unsubs.push(onSnapshot(qPublic, handleSnapshot, (err) => console.error('Error public materials:', err)));
+      
+      if (user?.email) {
+        const qPersonalized = query(collection(db, 'admin_materials'), where('allowedEmails', 'array-contains', user.email));
+        unsubs.push(onSnapshot(qPersonalized, handleSnapshot, (err) => console.error('Error personalized materials:', err)));
+      } else {
+        // If not logged in, stop loading after public materials are found
+        setLoadingMaterials(false);
+      }
+    }
+
+    return () => unsubs.forEach(unsub => unsub());
   }, [user]);
+
+  const filteredAdminMaterials = adminMaterials.filter(mat => {
+    if (!searchTerm && !filter) return true;
+
+    const matchesSearch = !searchTerm || 
+                         mat.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         mat.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         mat.chapter.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Simple category mapping for admin resources
+    const categoryToTopic: Record<string, string[]> = {
+      'c': ['c programming', 'c '],
+      'cpp': ['c++', 'cpp'],
+      'python': ['python'],
+      'java': ['java'],
+      'javascript': ['javascript', 'js'],
+      'web': ['web', 'html', 'css', 'tailwind'],
+      'frameworks': ['react', 'next', 'vue', 'angular', 'framework'],
+      'dsa': ['dsa', 'data structures', 'algorithms'],
+      'database': ['sql', 'nosql', 'dbms', 'database'],
+      'cloud': ['cloud', 'aws', 'azure', 'gcp'],
+      'cybersecurity': ['cyber', 'security', 'hacking']
+    };
+
+    const matchesCategory = !filter || (categoryToTopic[filter]?.some(keyword => 
+      mat.topic.toLowerCase().includes(keyword) || mat.chapter.toLowerCase().includes(keyword)
+    ));
+
+    return matchesSearch && matchesCategory;
+  });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -177,7 +229,7 @@ export default function Resources({ user }: ResourcesProps) {
         {/* Language Sections */}
         <div className="space-y-12">
           {/* Admin Materials Section */}
-          {adminMaterials.length > 0 && (
+          {user && (loadingMaterials || filteredAdminMaterials.length > 0) && (
             <div className="mb-14">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
                 <div className="flex items-center gap-3">
@@ -186,7 +238,7 @@ export default function Resources({ user }: ResourcesProps) {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-800 tracking-tight">Your Materials</h3>
-                    <p className="text-xs text-secondary/60 font-medium">Specially shared resources & materials</p>
+                    <p className="text-xs text-secondary/60 font-medium">Specially shared resources & materials for your email</p>
                   </div>
                 </div>
                 <button 
@@ -206,36 +258,42 @@ export default function Resources({ user }: ResourcesProps) {
                     exit={{ opacity: 0, y: -10 }}
                     className="w-full"
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
-                      {adminMaterials.map((mat) => (
-                        <div key={mat.id} className="bg-white p-6 sm:p-8 rounded-3xl sm:rounded-[40px] shadow-lg border border-emerald-100 hover:border-emerald-500 hover:shadow-xl transition-all duration-300 group flex flex-col justify-between">
-                          <div>
-                            <div className="flex justify-between items-start mb-6">
-                              <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-emerald-100">
-                                {mat.chapter}
-                              </span>
-                              {mat.videoUrl && (
-                                <div className="text-red-500" title="Includes Video">
-                                  <Youtube size={18} />
-                                </div>
-                              )}
+                    {loadingMaterials ? (
+                      <div className="flex items-center justify-center p-12">
+                        <Loader2 className="animate-spin text-emerald-600" size={32} />
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
+                        {filteredAdminMaterials.map((mat) => (
+                          <div key={mat.id} className="bg-white p-6 sm:p-8 rounded-3xl sm:rounded-[40px] shadow-lg border border-emerald-100 hover:border-emerald-500 hover:shadow-xl transition-all duration-300 group flex flex-col justify-between">
+                            <div>
+                              <div className="flex justify-between items-start mb-6">
+                                <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-emerald-100">
+                                  {mat.chapter}
+                                </span>
+                                {mat.videoUrl && (
+                                  <div className="text-red-500" title="Includes Video">
+                                    <Youtube size={18} />
+                                  </div>
+                                )}
+                              </div>
+                              <h4 className="font-bold text-lg sm:text-xl text-secondary mb-3 group-hover:text-emerald-600 transition-colors tracking-tight">
+                                {mat.topic}
+                              </h4>
+                              <p className="text-xs sm:text-sm text-secondary/60 mb-6 sm:mb-8 leading-relaxed line-clamp-3">
+                                {mat.details}
+                              </p>
                             </div>
-                            <h4 className="font-bold text-lg sm:text-xl text-secondary mb-3 group-hover:text-emerald-600 transition-colors tracking-tight">
-                              {mat.topic}
-                            </h4>
-                            <p className="text-xs sm:text-sm text-secondary/60 mb-6 sm:mb-8 leading-relaxed line-clamp-3">
-                              {mat.details}
-                            </p>
+                            <button 
+                              onClick={() => setSelectedMaterial(mat)}
+                              className="w-full bg-emerald-900 hover:bg-emerald-800 text-white py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-bold uppercase tracking-widest text-center transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10"
+                            >
+                              <FileText size={16} /> Read Material
+                            </button>
                           </div>
-                          <button 
-                            onClick={() => setSelectedMaterial(mat)}
-                            className="w-full bg-emerald-900 hover:bg-emerald-800 text-white py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-bold uppercase tracking-widest text-center transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10"
-                          >
-                            <FileText size={16} /> Read Material
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
