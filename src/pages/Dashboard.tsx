@@ -114,19 +114,36 @@ export default function Dashboard({ user }: DashboardProps) {
       console.error('Error listening to user patterns:', error);
     });
 
-    // Fetch active exams
-    const unsubExams = onSnapshot(query(collection(db, 'exams'), where('status', '==', 'active')), (snapshot) => {
-      const allActiveExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
-      // Filter by allowedEmails if the list is not empty
-      const filteredExams = allActiveExams.filter(exam => 
-        !exam.allowedEmails || 
-        exam.allowedEmails.length === 0 || 
-        exam.allowedEmails.includes(user.email)
-      );
-      setActiveExams(filteredExams);
-    }, (error) => {
-      console.error('Error listening to exams:', error);
-    });
+    // Fetch allowed active exams using targeted queries
+    const examSnapshots: Record<string, Exam> = {};
+    const unsubs: (() => void)[] = [];
+
+    const handleSnapshot = (snapshot: any) => {
+      snapshot.docs.forEach((doc: any) => {
+        examSnapshots[doc.id] = { id: doc.id, ...doc.data() } as Exam;
+      });
+      setActiveExams(Object.values(examSnapshots));
+    };
+
+    if (user.role === 'admin') {
+      const qAdmin = query(collection(db, 'exams'), where('status', '==', 'active'));
+      unsubs.push(onSnapshot(qAdmin, (snapshot) => {
+        setActiveExams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam)));
+      }));
+    } else {
+      const qPublicNone = query(collection(db, 'exams'), where('status', '==', 'active'), where('allowedEmails', '==', []));
+      
+      unsubs.push(onSnapshot(qPublicNone, handleSnapshot, (err) => console.error('Error public exams:', err)));
+      
+      if (user.email) {
+        const qPersonalized = query(collection(db, 'exams'), where('status', '==', 'active'), where('allowedEmails', 'array-contains', user.email));
+        unsubs.push(onSnapshot(qPersonalized, handleSnapshot, (err) => console.error('Error personalized exams:', err)));
+      }
+    }
+    
+    // Also listen for exams without the allowedEmails field (fallback for older docs)
+    // Note: Firestore doesn't support "where field not exists" in standard queries easily
+    // but the rules handles it. For safety, we rely on the above two.
 
     // Listen for exam window status
     const unsubSettings = onSnapshot(doc(db, 'settings', 'examWindow'), (doc) => {
@@ -139,7 +156,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
     return () => {
       unsubSubmissions();
-      unsubExams();
+      unsubs.forEach(unsub => unsub());
       unsubSettings();
     };
   }, [user.uid]);
