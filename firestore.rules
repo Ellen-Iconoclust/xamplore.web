@@ -71,8 +71,12 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "elleniconoclust@gmail.com" && request.auth.token.email_verified == true));
+        (
+          request.auth.token.email.lower() == 'elleniconoclust@gmail.com' ||
+          request.auth.uid == 'Ji2l2V0sJfZ1HeYFSuCFMLFCzN23' ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
     }
 
     function isValidUser(data) {
@@ -82,12 +86,31 @@ service cloud.firestore {
              data.role in ['student', 'admin'];
     }
 
-    function isValidSubmission(data) {
+    function isValidSubmissionCreate(data) {
       return data.keys().hasAll(['examId', 'userId', 'status', 'tabSwitches']) &&
              data.examId is string &&
              data.userId == request.auth.uid &&
-             data.status in ['in-progress', 'submitted', 'failed'] &&
-             data.tabSwitches is number;
+             data.status == 'in-progress' &&
+             data.tabSwitches == 0 &&
+             !('score' in data);
+    }
+
+    function isValidSubmissionUpdate(data, existing) {
+      // Students can only update their own in-progress submissions
+      // OR update their score if it hasn't been set yet (for instant grading fallback)
+      let isStudentRegularUpdate = isOwner(existing.userId) && 
+                            data.userId == existing.userId &&
+                            data.examId == existing.examId &&
+                            !('score' in data || 'results' in data);
+
+      let isStudentScoreUpdate = isOwner(existing.userId) &&
+                            data.userId == existing.userId &&
+                            data.examId == existing.examId &&
+                            existing.status == 'submitted' &&
+                            !('score' in existing) &&
+                            ('score' in data);
+      
+      return isAdmin() || isStudentRegularUpdate || isStudentScoreUpdate;
     }
 
     function isValidAdminMaterial(data) {
@@ -120,10 +143,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    function hasSubmitted(examId) {
+      return exists(/databases/$(database)/documents/submissions/$(request.auth.uid + '_' + examId)) ||
+             exists(/databases/$(database)/documents/submissions/$(examId + '_' + request.auth.uid)); 
+             // Note: Submission IDs might vary, checking for existance is safer if we know the path
+    }
+
+    match /exam_keys/{examId} {
+      allow read: if isAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/submissions/$(request.auth.uid + "_" + examId)) &&
+        get(/databases/$(database)/documents/submissions/$(request.auth.uid + "_" + examId)).data.status == 'submitted'
+      );
+      allow write: if isAdmin();
+    }
+
     match /submissions/{submissionId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && isValidSubmission(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidSubmissionCreate(request.resource.data);
+      allow update: if isAuthenticated() && isValidSubmissionUpdate(request.resource.data, resource.data);
     }
 
     match /resources/{resourceId} {
