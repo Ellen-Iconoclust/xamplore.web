@@ -25,6 +25,7 @@ export default function Navbar({ user }: NavbarProps) {
     { name: 'Test', path: '/dashboard' },
     { name: 'Courses', path: '/resources' },
     { name: 'Hangman', path: '/games' },
+    { name: 'Profile', path: '/profile' },
     { name: 'Admin', path: '/admin', adminOnly: true },
     { name: 'About', path: '/about' },
   ];
