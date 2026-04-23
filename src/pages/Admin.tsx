@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp, getDoc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { User, Exam, Question, Resource, AdminMaterial } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -91,19 +91,45 @@ export default function Admin({ user }: AdminProps) {
     
     try {
       const examData = { ...newExam };
+      const questionsWithNoAnswers = examData.questions?.map(q => {
+        const { correctAnswer, ...rest } = q;
+        return rest;
+      });
+      
+      const answerKey = {
+        examId: editingExam?.id || '',
+        answers: examData.questions?.reduce((acc, q) => ({
+          ...acc,
+          [q.id]: q.correctAnswer ?? 0
+        }), {})
+      };
+
       if (examData.status === 'active' && !editingExam) {
         examData.startTime = serverTimestamp() as any;
       }
       
+      let finalExamId = editingExam?.id;
+
       if (editingExam) {
         await updateDoc(doc(db, 'exams', editingExam.id), {
-          ...examData
+          ...examData,
+          questions: questionsWithNoAnswers
+        });
+        await setDoc(doc(db, 'exam_keys', editingExam.id), {
+          answers: answerKey.answers,
+          examId: editingExam.id
         });
       } else {
-        await addDoc(collection(db, 'exams'), {
+        const docRef = await addDoc(collection(db, 'exams'), {
           ...examData,
+          questions: questionsWithNoAnswers,
           createdBy: user.uid,
           createdAt: serverTimestamp()
+        });
+        finalExamId = docRef.id;
+        await setDoc(doc(db, 'exam_keys', finalExamId), {
+          answers: answerKey.answers,
+          examId: finalExamId
         });
       }
       setShowExamModal(false);
@@ -181,6 +207,35 @@ export default function Admin({ user }: AdminProps) {
       updates.startTime = serverTimestamp();
     }
     await updateDoc(doc(db, 'exams', exam.id), updates);
+  };
+
+  const handleGradeSubmission = async (sub: any) => {
+    try {
+      const keySnap = await getDoc(doc(db, 'exam_keys', sub.examId));
+      if (!keySnap.exists()) {
+        alert('Answer key not found for this exam.');
+        return;
+      }
+      
+      const { answers: correctAnswers } = keySnap.data();
+      const studentAnswers = sub.answers || {};
+      
+      let score = 0;
+      Object.keys(correctAnswers).forEach(qId => {
+        if (studentAnswers[qId] !== undefined && String(studentAnswers[qId]) === String(correctAnswers[qId])) {
+          score++;
+        }
+      });
+      
+      await updateDoc(doc(db, 'submissions', sub.id), {
+        score,
+        status: 'submitted', // Ensure it's marked as submitted if it wasn't
+        gradedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error grading submission:', error);
+      alert('Failed to grade submission');
+    }
   };
 
   const handleResetSubmission = async (id: string) => {
@@ -490,7 +545,18 @@ export default function Admin({ user }: AdminProps) {
                     </td>
                     <td className="px-8 py-6">
                       {sub.status === 'submitted' ? (
-                        <p className="text-sm font-bold text-emerald-600">{sub.score} / {sub.totalQuestions}</p>
+                        <div className="flex flex-col">
+                          {sub.score !== undefined ? (
+                            <p className="text-sm font-bold text-emerald-600">{sub.score} / {sub.totalQuestions}</p>
+                          ) : (
+                            <button 
+                              onClick={() => handleGradeSubmission(sub)}
+                              className="text-[10px] font-bold text-primary uppercase underline decoration-primary/30 hover:decoration-primary"
+                            >
+                              Grade Now
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <p className="text-xs text-red-500 font-medium italic">{sub.reason || 'Malpractice detected'}</p>
                       )}
