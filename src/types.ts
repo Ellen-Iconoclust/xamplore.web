@@ -7,6 +7,10 @@ export interface User {
   photoURL?: string;
   role: 'student' | 'admin';
   createdAt: Timestamp;
+  wordleStreak?: number;
+  wordleLastSolved?: string; // YYYY-MM-DD
+  hangmanStreak?: number;
+  achievements?: string[];
 }
 
 export interface Question {
