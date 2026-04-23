@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp, onSnapshot, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User, Exam } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clock, AlertTriangle, Loader2, CheckCircle2, ArrowLeft, ArrowRight, ShieldCheck, Info, Trophy, RotateCcw, Home as HomeIcon, Download, XCircle } from 'lucide-react';
+import { Clock, AlertTriangle, Loader2, CheckCircle2, ArrowLeft, ArrowRight, ShieldCheck, Info, Trophy, RotateCcw, Home as HomeIcon, Download, XCircle, Maximize, Zap, Lock } from 'lucide-react';
 
 interface ExamPageProps {
   user: User;
@@ -27,10 +27,20 @@ export default function ExamPage({ user }: ExamPageProps) {
   const [tabSwitches, setTabSwitches] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<'idle' | 'started' | 'completed' | 'failed'>('idle');
-  const [score, setScore] = useState(0);
   const [isWaiting, setIsWaiting] = useState(false);
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const answersRef = useRef<Record<string, number>>({});
+  const tabSwitchesRef = useRef(0);
+  const wasFullscreenActive = useRef(false);
+
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    tabSwitchesRef.current = tabSwitches;
+  }, [tabSwitches]);
 
   useEffect(() => {
     if (!examId || !db || !user) return;
@@ -38,33 +48,31 @@ export default function ExamPage({ user }: ExamPageProps) {
     const initExam = async () => {
       setLoading(true);
       try {
-        // 1. Check for existing submission first
-        const q = query(
-          collection(db, 'submissions'), 
-          where('userId', '==', user.uid), 
-          where('examId', '==', examId)
-        );
-        const snapshot = await getDocs(q);
-        let currentSubmission: any = null;
+        const submissionId = `${user.uid}_${examId}`;
+        const submissionRef = doc(db, 'submissions', submissionId);
+        const submissionSnap = await getDoc(submissionRef);
         
-        if (!snapshot.empty) {
-          const submissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        // 1. Check for existing submission
+        if (submissionSnap.exists()) {
+          const subData = submissionSnap.data() as any;
           
-          const isSubmitted = submissions.some(s => s.status === 'submitted');
-          const isFailed = submissions.some(s => s.status === 'failed');
-
-          if (isSubmitted) {
+          if (subData.status === 'submitted') {
             alert('You have already completed this exam.');
             navigate('/dashboard');
             return;
-          } else if (isFailed) {
+          } else if (subData.status === 'failed') {
             alert('This exam is blocked due to malpractice.');
             navigate('/dashboard');
             return;
+          } else if (subData.status === 'retake_allowed') {
+            // Check expiry
+            const now = new Date();
+            if (subData.specialLoginExpiry && subData.specialLoginExpiry.toDate() < now) {
+              alert('Special login window has expired. Please contact admin.');
+              navigate('/dashboard');
+              return;
+            }
           }
-          
-          // Find retake_allowed or in-progress
-          currentSubmission = submissions.find(s => s.status === 'retake_allowed' || s.status === 'in-progress');
         }
 
         // 2. Fetch exam data
@@ -95,18 +103,11 @@ export default function ExamPage({ user }: ExamPageProps) {
           setServerEndTime(Date.now() + (examData.duration * 60 * 1000));
         }
 
-        // 3. Handle submission state
-        if (currentSubmission) {
-          if (currentSubmission.status === 'retake_allowed') {
-            // Check expiry
-            const now = new Date();
-            if (currentSubmission.specialLoginExpiry && currentSubmission.specialLoginExpiry.toDate() < now) {
-              alert('Special login window has expired. Please contact admin.');
-              navigate('/dashboard');
-              return;
-            }
-            // Update to in-progress
-            await updateDoc(doc(db, 'submissions', currentSubmission.id), {
+        // 3. Update or Initial Lock-in
+        if (submissionSnap.exists()) {
+          const subData = submissionSnap.data() as any;
+          if (subData.status === 'retake_allowed') {
+            await updateDoc(submissionRef, {
               status: 'in-progress',
               startedAt: serverTimestamp(),
               specialLoginExpiry: null,
@@ -116,8 +117,8 @@ export default function ExamPage({ user }: ExamPageProps) {
             });
           }
         } else {
-          // Create new in-progress submission to "lock in" the user
-          await addDoc(collection(db, 'submissions'), {
+          // Create new in-progress submission
+          await setDoc(submissionRef, {
             examId: examId,
             userId: user.uid,
             userName: enteredName,
@@ -129,9 +130,17 @@ export default function ExamPage({ user }: ExamPageProps) {
           });
         }
 
-        setStatus('started');
         setStarted(true);
+        setStatus('started');
         setLoading(false);
+        
+        // Attempt fullscreen again on entry
+        try {
+          if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+             document.documentElement.requestFullscreen().catch(() => {});
+             wasFullscreenActive.current = true;
+          }
+        } catch (e) {}
       } catch (error) {
         console.error('Error initializing exam:', error);
         setLoading(false);
@@ -141,7 +150,7 @@ export default function ExamPage({ user }: ExamPageProps) {
     initExam();
     
     return () => {
-      // Cleanup logic if needed
+      // Cleanup
     };
   }, [examId, user.uid, navigate]);
 
@@ -176,7 +185,7 @@ export default function ExamPage({ user }: ExamPageProps) {
     };
 
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement && status === 'started') {
+      if (wasFullscreenActive.current && !document.fullscreenElement && status === 'started') {
         setStatus('failed');
         triggerFail('Exited fullscreen mode');
       }
@@ -189,23 +198,12 @@ export default function ExamPage({ user }: ExamPageProps) {
       }
     };
 
+    // Malpractice listeners
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('keydown', handleKeyDown);
-    
-    // Attempt to enter fullscreen
-    try {
-      const docEl = document.documentElement;
-      if (docEl.requestFullscreen) {
-        docEl.requestFullscreen().catch(err => {
-          console.warn('Fullscreen request rejected:', err);
-        });
-      }
-    } catch (e) {
-      console.error('Fullscreen request failed');
-    }
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -242,61 +240,88 @@ export default function ExamPage({ user }: ExamPageProps) {
   const triggerFail = async (reason: string) => {
     if (!examId || !exam) return;
     try {
-      document.exitFullscreen().catch(() => {});
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
     } catch (e) {}
     
-    // Find the current in-progress submission to update it
-    const q = query(
-      collection(db, 'submissions'), 
-      where('userId', '==', user.uid), 
-      where('examId', '==', examId),
-      where('status', '==', 'in-progress')
-    );
-    const snapshot = await getDocs(q);
-    
-    if (!snapshot.empty) {
-      await updateDoc(doc(db, 'submissions', snapshot.docs[0].id), {
+    try {
+      const submissionId = `${user.uid}_${examId}`;
+      const submissionRef = doc(db, 'submissions', submissionId);
+      
+      await updateDoc(submissionRef, {
         status: 'failed',
         reason: reason,
         tabSwitches: tabSwitches + 1,
         submittedAt: serverTimestamp()
       });
+    } catch (err) {
+      console.error('Error recording malpractice:', err);
     }
   };
+
+  const [score, setScore] = useState<number | null>(null);
 
   const handleSubmit = async () => {
     if (!exam || !examId || submitting) return;
     setSubmitting(true);
     
+    // Use refs to get latest state during auto-submit from timer
+    const currentAnswers = answersRef.current;
+    const currentTabSwitches = tabSwitchesRef.current;
+    
     try {
-      // Calculate score
-      let calculatedScore = 0;
-      exam.questions.forEach(q => {
-        if (answers[q.id] === q.correctAnswer) {
-          calculatedScore += 1;
-        }
+      const submissionId = `${user.uid}_${examId}`;
+      const submissionRef = doc(db, 'submissions', submissionId);
+      
+      await updateDoc(submissionRef, {
+        answers: currentAnswers,
+        tabSwitches: currentTabSwitches,
+        status: 'submitted',
+        totalQuestions: exam.questions.length,
+        submittedAt: serverTimestamp()
       });
-      setScore(calculatedScore);
 
-      // Find the current in-progress submission to update it
-      const q = query(
-        collection(db, 'submissions'), 
-        where('userId', '==', user.uid), 
-        where('examId', '==', examId),
-        where('status', '==', 'in-progress')
-      );
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        await updateDoc(doc(db, 'submissions', snapshot.docs[0].id), {
-          answers,
-          tabSwitches,
-          status: 'submitted',
-          score: calculatedScore,
-          totalQuestions: exam.questions.length,
-          submittedAt: serverTimestamp()
+      // Auto-Grade Attempt (Server-Side preferred)
+      try {
+        const response = await fetch('/api/grade-submission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ submissionId, examId })
         });
+        const result = await response.json();
+        if (result.success) {
+          setScore(result.score);
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (gradErr) {
+        console.warn('Server grading failed, attempting client-side fallback:', gradErr);
+        // Client-Side Fallback (Now authorized by rules after submission)
+        try {
+          const keySnap = await getDoc(doc(db, 'exam_keys', examId));
+          if (keySnap.exists()) {
+            const { answers: correctAnswers } = keySnap.data();
+            let calculatedScore = 0;
+            const questionIds = Object.keys(correctAnswers);
+            questionIds.forEach(qId => {
+              if (currentAnswers[qId] !== undefined && String(currentAnswers[qId]) === String(correctAnswers[qId])) {
+                calculatedScore++;
+              }
+            });
+            
+            // Update score locally back to Firestore
+            await updateDoc(submissionRef, {
+              score: calculatedScore,
+              gradedAt: serverTimestamp()
+            });
+            setScore(calculatedScore);
+          }
+        } catch (clientGradErr) {
+          console.error('Final grading fallback failed:', clientGradErr);
+        }
       }
+      
       setStatus('completed');
     } catch (error) {
       console.error('Error submitting exam:', error);
@@ -329,14 +354,18 @@ export default function ExamPage({ user }: ExamPageProps) {
           <div className="mb-8">
             <Trophy size={64} className="mx-auto text-emerald-500" />
           </div>
-          <h2 className="text-3xl font-bold text-emerald-600 brand mb-4">Test Completed Successfully!</h2>
+          <h2 className="text-3xl font-bold text-emerald-600 brand mb-4">Test Submitted!</h2>
           <p className="text-lg font-semibold text-gray-700 mb-8">
-            {enteredName} — Pattern {exam.pattern} — Score {score}/{exam.questions.length}
+            {enteredName} — Pattern {exam.pattern} — {score !== null ? `Score: ${score}/${exam.questions.length}` : 'Evaluation Pending'}
           </p>
           
           <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-lg mb-8">
-            <p className="text-sm text-emerald-700 mb-2">Pattern Completed: <span className="font-bold">{exam.pattern}</span></p>
-            <p className="text-xs text-emerald-600">You cannot retake this pattern</p>
+            {score !== null ? (
+              <p className="text-sm text-emerald-700 mb-2 font-bold italic">Verification complete. Great job!</p>
+            ) : (
+              <p className="text-sm text-emerald-700 mb-2">Final results are being securely verified...</p>
+            )}
+            <p className="text-[10px] text-emerald-600 uppercase tracking-widest font-bold">Secure ID: {examId?.slice(-6)}</p>
           </div>
 
           <div className="space-y-4">
