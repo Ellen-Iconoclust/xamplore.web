@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, RotateCcw, Gamepad2, Star, Target, Sparkles, Code, Brain, Zap, Heart, Info, XCircle, CheckCircle2, Loader2, Share2, PlayCircle, Send, ChevronDown, ChevronUp, User, BookOpen, ExternalLink, Play, Keyboard, Lightbulb, Delete } from 'lucide-react';
+import { Trophy, RotateCcw, Gamepad2, Star, Target, Sparkles, Code, Brain, Zap, Heart, Info, XCircle, CheckCircle2, Loader2, Share2, PlayCircle, Send, ChevronDown, ChevronUp, User as UserIcon, BookOpen, ExternalLink, Play, Keyboard, Lightbulb, Delete, Award } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WORDS } from '../data/hangmanWords';
 import { LOGIC_PUZZLES } from '../data/logicPuzzles';
 import { WORDLE_WORDS } from '../data/wordleWords';
 import { getDailyWordObj } from '../utils/wordle';
+import { User } from '../types';
+import { db } from '../firebase';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 
-export default function Games() {
+interface GamesProps {
+  user: User | null;
+}
+
+export default function Games({ user }: GamesProps) {
   const [activeGame, setActiveGame] = useState<'hangman' | 'logic' | 'wordle'>('hangman');
   
   // Hangman State
@@ -68,6 +75,13 @@ export default function Games() {
         if (next >= maxMistakes) {
           setHangmanGameOver(true);
           setHangmanWon(false);
+          
+          // Reset hangman streak on loss
+          if (user) {
+            updateDoc(doc(db, 'users', user.uid), {
+              hangmanStreak: 0
+            }).catch(err => console.error('Failed to reset hangman streak:', err));
+          }
         }
         return next;
       });
@@ -138,9 +152,45 @@ export default function Games() {
       if (guessToSubmit === wordleTarget) {
         setWordleStatus('won');
         localStorage.setItem(`wordle_status_${today}`, 'won');
+        
+        // Update streak and handle achievements in Firestore
+        if (user) {
+          const lastSolved = user.wordleLastSolved;
+          const currentStreak = user.wordleStreak || 0;
+          let newStreak = 1;
+
+          if (lastSolved) {
+            const lastDate = new Date(lastSolved);
+            const todayDate = new Date(today);
+            const diffTime = Math.abs(todayDate.getTime() - lastDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 1) {
+              newStreak = currentStreak + 1;
+            }
+          }
+
+          const updates: any = {
+            wordleStreak: newStreak,
+            wordleLastSolved: today
+          };
+
+          if (newStreak >= 30 && (!user.achievements || !user.achievements.includes('Wordle Wordsworth'))) {
+            updates.achievements = arrayUnion('Wordle Wordsworth');
+          }
+
+          updateDoc(doc(db, 'users', user.uid), updates).catch(err => console.error('Failed to update wordle streak:', err));
+        }
       } else if (wordleGuesses.length + 1 >= maxWordleRows) {
         setWordleStatus('lost');
         localStorage.setItem(`wordle_status_${today}`, 'lost');
+        
+        // Reset streak in Firestore on loss
+        if (user) {
+          updateDoc(doc(db, 'users', user.uid), {
+            wordleStreak: 0
+          }).catch(err => console.error('Failed to reset wordle streak:', err));
+        }
       }
       
       setCurrentWordleGuess('');
@@ -197,9 +247,28 @@ export default function Games() {
         setHangmanWon(true);
         setHangmanGameOver(true);
         setHangmanScore(prev => prev + 10);
+        
+        // Update hangman streak only if 0 mistakes
+        if (user && mistakes === 0) {
+          const newStreak = (user.hangmanStreak || 0) + 1;
+          const updates: any = {
+            hangmanStreak: newStreak
+          };
+          
+          if (newStreak >= 30 && (!user.achievements || !user.achievements.includes('Non-Hanger 1'))) {
+            updates.achievements = arrayUnion('Non-Hanger 1');
+          }
+          
+          updateDoc(doc(db, 'users', user.uid), updates).catch(err => console.error('Failed to update hangman streak:', err));
+        } else if (user) {
+          // Reset streak if errors were made but still won
+          updateDoc(doc(db, 'users', user.uid), {
+            hangmanStreak: 0
+          }).catch(err => console.error('Failed to reset hangman streak due to error:', err));
+        }
       }
     }
-  }, [guessedLetters, wordObj.word, activeGame]);
+  }, [guessedLetters, wordObj.word, activeGame, user, mistakes]);
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
