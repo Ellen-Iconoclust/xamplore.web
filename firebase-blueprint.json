@@ -10,7 +10,11 @@
         "displayName": { "type": "string", "description": "User display name." },
         "photoURL": { "type": "string", "description": "User photo URL." },
         "role": { "type": "string", "enum": ["student", "admin"], "description": "User role." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation time." }
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation time." },
+        "wordleStreak": { "type": "integer" },
+        "wordleLastSolved": { "type": "string" },
+        "hangmanStreak": { "type": "integer" },
+        "achievements": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["uid", "email", "role"]
     },
@@ -92,6 +96,16 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["topic", "chapter", "content"]
+    },
+    "ExamKey": {
+      "title": "ExamKey",
+      "description": "Secure storage for exam correct answers. Restricted to admins.",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string" },
+        "answers": { "type": "object", "description": "Map of questionId to correctAnswer index." }
+      },
+      "required": ["examId", "answers"]
     }
   },
   "firestore": {
@@ -99,6 +113,7 @@
     "/exams/{examId}": { "schema": "Exam", "description": "Exams collection." },
     "/submissions/{submissionId}": { "schema": "Submission", "description": "Exam submissions." },
     "/resources/{resourceId}": { "schema": "Resource", "description": "Learning resources." },
-    "/admin_materials/{materialId}": { "schema": "AdminMaterial", "description": "Admin uploaded study materials." }
+    "/admin_materials/{materialId}": { "schema": "AdminMaterial", "description": "Admin uploaded study materials." },
+    "/exam_keys/{examId}": { "schema": "ExamKey", "description": "Secure storage for exam answers." }
   }
 }
