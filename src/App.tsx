@@ -13,6 +13,7 @@ import Games from './pages/Games';
 import Resources from './pages/Resources';
 import Admin from './pages/Admin';
 import About from './pages/About';
+import Profile from './pages/Profile';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
@@ -62,7 +63,8 @@ export default function App() {
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
             <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
             <Route path="/exam/:examId" element={user ? <Exam user={user} /> : <Navigate to="/login" />} />
-            <Route path="/games" element={<Games />} />
+            <Route path="/games" element={<Games user={user} />} />
+            <Route path="/profile" element={user ? <Profile user={user} /> : <Navigate to="/login" />} />
             <Route path="/resources" element={<Resources user={user} />} />
             <Route path="/about" element={<About />} />
             <Route path="/admin" element={user?.role === 'admin' ? <Admin user={user} /> : <Navigate to="/dashboard" />} />
