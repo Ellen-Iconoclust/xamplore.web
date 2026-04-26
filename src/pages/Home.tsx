@@ -46,7 +46,7 @@ export default function Home() {
                   
                   <div className="text-xs text-gray-500 mt-5">
                     <Info className="inline w-3 h-3 mr-1" />
-                    Platform Version: <span className="font-bold">Xam4.0</span>
+                    Platform Version: <span className="font-bold">Xam5.0</span>
                   </div>
                 </div>
                 
