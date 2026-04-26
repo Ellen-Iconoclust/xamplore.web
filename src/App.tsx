@@ -21,6 +21,65 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Disable right-click context menu
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    // Disable keyboard shortcuts for developer tools
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+      const optionOrAlt = e.altKey;
+      const shift = e.shiftKey;
+
+      // Block F12
+      if (e.key === 'F12' || e.keyCode === 123) {
+        e.preventDefault();
+        return;
+      }
+
+      // Block Ctrl+Shift+I or Cmd+Option+I (Inspect)
+      if (cmdOrCtrl && (isMac ? optionOrAlt : shift) && (e.key === 'I' || e.key === 'i' || e.keyCode === 73)) {
+        e.preventDefault();
+        return;
+      }
+
+      // Block Ctrl+Shift+J or Cmd+Option+J (Console)
+      if (cmdOrCtrl && (isMac ? optionOrAlt : shift) && (e.key === 'J' || e.key === 'j' || e.keyCode === 74)) {
+        e.preventDefault();
+        return;
+      }
+
+      // Block Ctrl+Shift+C or Cmd+Option+C (Inpsect tool)
+      if (cmdOrCtrl && (isMac ? optionOrAlt : shift) && (e.key === 'C' || e.key === 'c' || e.keyCode === 67)) {
+        e.preventDefault();
+        return;
+      }
+
+      // Block Ctrl+U or Cmd+U (View Source)
+      if (cmdOrCtrl && (e.key === 'U' || e.key === 'u' || e.keyCode === 85)) {
+        e.preventDefault();
+        return;
+      }
+
+      // Block Ctrl+S or Cmd+S (Save Page)
+      if (cmdOrCtrl && (e.key === 'S' || e.key === 's' || e.keyCode === 83)) {
+        e.preventDefault();
+        return;
+      }
+    };
+
+    window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
