@@ -249,18 +249,30 @@ export default function Games({ user }: GamesProps) {
         setHangmanScore(prev => prev + 10);
         
         // Update hangman streak only if 0 mistakes
-        if (user && mistakes === 0) {
-          const newStreak = (user.hangmanStreak || 0) + 1;
-          const updates: any = {
-            hangmanStreak: newStreak
-          };
-          
-          if (newStreak >= 30 && (!user.achievements || !user.achievements.includes('Non-Hanger 1'))) {
-            updates.achievements = arrayUnion('Non-Hanger 1');
-          }
-          
-          updateDoc(doc(db, 'users', user.uid), updates).catch(err => console.error('Failed to update hangman streak:', err));
-        } else if (user) {
+          if (user && mistakes === 0) {
+            const newStreak = (user.hangmanStreak || 0) + 1;
+            const updates: any = {
+              hangmanStreak: newStreak
+            };
+            
+            const levels = [
+              { streak: 10, id: 'Non-Hanger 1' },
+              { streak: 30, id: 'Non-Hanger 2' },
+              { streak: 60, id: 'Non-Hanger 3' },
+              { streak: 120, id: 'Non-Hanger 4' },
+              { streak: 300, id: 'Non-Hanger 5' }
+            ];
+
+            const earned = levels
+              .filter(l => newStreak >= l.streak && (!user.achievements || !user.achievements.includes(l.id)))
+              .map(l => l.id);
+
+            if (earned.length > 0) {
+              updates.achievements = arrayUnion(...earned);
+            }
+            
+            updateDoc(doc(db, 'users', user.uid), updates).catch(err => console.error('Failed to update hangman streak:', err));
+          } else if (user) {
           // Reset streak if errors were made but still won
           updateDoc(doc(db, 'users', user.uid), {
             hangmanStreak: 0
