@@ -173,27 +173,35 @@ export default function Profile({ user }: ProfileProps) {
                 </div>
               )}
 
-              {user.achievements?.includes('Non-Hanger 1') ? (
-                <div className="flex items-center gap-4 p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                  <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600 shrink-0">
-                    <Medal size={24} />
+              {[
+                { id: 'Non-Hanger 1', streak: 10 },
+                { id: 'Non-Hanger 2', streak: 30 },
+                { id: 'Non-Hanger 3', streak: 60 },
+                { id: 'Non-Hanger 4', streak: 120 },
+                { id: 'Non-Hanger 5', streak: 300 }
+              ].map((level) => (
+                user.achievements?.includes(level.id) ? (
+                  <div key={level.id} className="flex items-center gap-4 p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600 shrink-0">
+                      <Medal size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">{level.id}</h4>
+                      <p className="text-xs text-gray-600">Solved {level.streak} Tech Hangman words without errors.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-gray-900">Non-Hanger 1</h4>
-                    <p className="text-xs text-gray-600">Solved 30 Tech Hangman words without errors.</p>
+                ) : (
+                  <div key={level.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-dashed border-gray-200 grayscale opacity-50">
+                    <div className="w-12 h-12 bg-gray-200 rounded-xl flex items-center justify-center text-gray-400 shrink-0">
+                      <Medal size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-600">{level.id}</h4>
+                      <p className="text-xs text-gray-500 truncate">Solve {level.streak} Hangmen flawlessly to unlock.</p>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-dashed border-gray-200 grayscale opacity-50">
-                  <div className="w-12 h-12 bg-gray-200 rounded-xl flex items-center justify-center text-gray-400 shrink-0">
-                    <Medal size={24} />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-gray-600">Non-Hanger 1</h4>
-                    <p className="text-xs text-gray-500 truncate">Solve 30 Hangmen flawlessly to unlock.</p>
-                  </div>
-                </div>
-              )}
+                )
+              ))}
 
               {!hasAchievements && (
                 <div className="mt-8 p-6 bg-gray-50 rounded-2xl text-center border-2 border-dashed border-gray-200">
