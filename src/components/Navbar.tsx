@@ -37,7 +37,7 @@ export default function Navbar({ user }: NavbarProps) {
       <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
         <Link to="/" className="flex items-center gap-2 brand text-2xl font-extrabold text-emerald-600">
           <GraduationCap className="w-8 h-8" /> Xamplore
-          <span className="text-xs font-normal bg-emerald-100 text-emerald-700 px-2 py-1 rounded">v4.0</span>
+          <span className="text-xs font-normal bg-emerald-100 text-emerald-700 px-2 py-1 rounded">v5.0</span>
         </Link>
 
         {/* Desktop Menu */}
